@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Base — fonte e estilos globais derivados dos tokens
+   ============================================================ */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    font-family: theme('fontFamily.sans');
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-bg text-text;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  /* Foco visível e consistente para navegação por teclado (acessibilidade). */
+  :focus-visible {
+    @apply outline-none ring-2 ring-secondary ring-offset-2 ring-offset-bg;
+  }
+
+  /* Valores monetários sempre com largura tabular para alinhar colunas. */
+  .money {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ============================================================
+   Componentes reutilizáveis compostos com @apply
+   (mantêm as classes consistentes sem espalhar "magic values")
+   ============================================================ */
+@layer components {
+  .card-base {
+    @apply rounded-lg border border-border bg-surface shadow-card;
+  }
+
+  .input-base {
+    @apply w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text
+      placeholder:text-text-subtle focus:border-secondary focus:outline-none
+      focus:ring-2 focus:ring-secondary/40 disabled:cursor-not-allowed disabled:bg-bg;
+  }
+
+  /* Esconde a scrollbar mantendo a rolagem (usado em trilhas horizontais). */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

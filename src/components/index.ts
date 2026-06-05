@@ -1,0 +1,28 @@
+/** Barrel do Design System — importe componentes via `@/components`. */
+export { Button } from './Button';
+export type { ButtonProps, ButtonVariant, ButtonSize } from './Button';
+export { Input, Select, Field } from './Input';
+export type { InputProps, SelectProps, FieldProps } from './Input';
+export { PasswordInput } from './PasswordInput';
+export type { PasswordInputProps } from './PasswordInput';
+export { Card, CardHeader, CardTitle, CardBody } from './Card';
+export type { CardProps } from './Card';
+export { Badge } from './Badge';
+export type { BadgeProps, BadgeTone } from './Badge';
+export { Avatar } from './Avatar';
+export type { AvatarProps } from './Avatar';
+export { KpiCard } from './KpiCard';
+export type { KpiCardProps } from './KpiCard';
+export { Table } from './Table';
+export type { TableProps, Column } from './Table';
+export { SearchInput } from './SearchInput';
+export type { SearchInputProps } from './SearchInput';
+export { ProductImage } from './ProductImage';
+export type { ProductImageProps } from './ProductImage';
+export { SlideOver } from './SlideOver';
+export type { SlideOverProps } from './SlideOver';
+export { PageLoader } from './PageLoader';
+export { ErrorState } from './ErrorState';
+export type { ErrorStateProps } from './ErrorState';
+export { ToastCard } from './Toast';
+export type { ToastData, ToastTone, ToastCardProps } from './Toast';
