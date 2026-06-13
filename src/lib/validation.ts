@@ -70,3 +70,23 @@ export const productPriceSchema = z.object({
     .max(100000, 'Preço fora do intervalo.'),
 });
 export type ProductPriceInput = z.infer<typeof productPriceSchema>;
+
+/** Cadastro manual de um produto no catálogo (com um preço inicial por mercado). */
+export const catalogProductSchema = z.object({
+  name: z.string().trim().min(2, 'Informe o nome do produto.').max(80),
+  category: z.enum(PRODUCT_CATEGORIES, { message: 'Selecione uma categoria.' }),
+  unit: z.string().trim().min(1, 'Informe a unidade (ex.: 1 kg).').max(20),
+  // Código de barras opcional; se preenchido, deve ter 8 a 14 dígitos.
+  barcode: z
+    .string()
+    .trim()
+    .regex(/^\d{8,14}$/, 'Código inválido (use de 8 a 14 dígitos).')
+    .optional()
+    .or(z.literal('')),
+  marketId: z.string().min(1, 'Selecione um mercado.'),
+  price: z.coerce
+    .number({ message: 'Preço inválido.' })
+    .positive('O preço deve ser maior que zero.')
+    .max(100000, 'Preço fora do intervalo.'),
+});
+export type CatalogProductInput = z.infer<typeof catalogProductSchema>;

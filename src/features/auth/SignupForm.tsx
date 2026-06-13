@@ -30,8 +30,10 @@ export function SignupForm() {
     try {
       await signup(values);
       navigate('/', { replace: true });
-    } catch {
-      setFormError('Não foi possível concluir o cadastro. Tente novamente.');
+    } catch (err) {
+      setFormError(
+        err instanceof Error ? err.message : 'Não foi possível concluir o cadastro. Tente novamente.',
+      );
     }
   }
 

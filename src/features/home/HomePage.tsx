@@ -6,18 +6,21 @@
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ListPlus, History, PiggyBank, Trophy, ShoppingBasket } from 'lucide-react';
+import { ListPlus, History, PackagePlus, PiggyBank, Trophy, ShoppingBasket } from 'lucide-react';
 import { Button, Card, CardBody, CardHeader, CardTitle, ErrorState, KpiCard } from '@/components';
 import { formatCurrency } from '@/lib/currency';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useLists } from '@/features/list/ListContext';
+import { useCatalog } from '@/features/catalog/useCatalog';
+import { AddCatalogProductSlideOver } from '@/features/catalog/AddCatalogProductSlideOver';
+import { useMarkets } from '@/features/list/queries';
 import type { ProductCategory } from '@/types';
 import { CatalogFilters } from './CatalogFilters';
 import { ProductCard } from './ProductCard';
 import { FavoritesPanel } from './FavoritesPanel';
 import { SavingsCards } from './SavingsCards';
-import { useCategories, useFavorites, useProducts, useRecentSavings } from './queries';
+import { useCategories, useFavorites, useRecentSavings } from './queries';
 
 /** Normaliza texto para busca tolerante a acentos e caixa. */
 function normalize(text: string): string {
@@ -33,12 +36,14 @@ export function HomePage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<ProductCategory | 'all'>('all');
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const debouncedQuery = useDebounce(query, 200);
 
-  const productsQuery = useProducts();
+  const productsQuery = useCatalog();
   const categoriesQuery = useCategories();
   const savingsQuery = useRecentSavings();
   const favoritesQuery = useFavorites();
+  const marketsQuery = useMarkets();
 
   // Memoizados para manter referência estável entre renders (deps de useMemo abaixo).
   const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
@@ -126,8 +131,16 @@ export function HomePage() {
       {/* Catálogo de produtos (destaque prioritário) */}
       <section aria-label="Catálogo de produtos">
         <Card>
-          <CardHeader className="flex-col items-start gap-4 sm:flex-row sm:items-center">
+          <CardHeader className="flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Catálogo de produtos</CardTitle>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCatalogOpen(true)}
+              leftIcon={<PackagePlus className="h-4 w-4" aria-hidden="true" />}
+            >
+              Adicionar ao catálogo
+            </Button>
           </CardHeader>
           <CardBody className="flex flex-col gap-5">
             <CatalogFilters
@@ -169,6 +182,12 @@ export function HomePage() {
           <SavingsCards savings={savings} isLoading={savingsQuery.isLoading} />
         </div>
       </section>
+
+      <AddCatalogProductSlideOver
+        open={catalogOpen}
+        onClose={() => setCatalogOpen(false)}
+        markets={marketsQuery.data ?? []}
+      />
     </div>
   );
 }

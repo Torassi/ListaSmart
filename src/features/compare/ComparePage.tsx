@@ -11,15 +11,20 @@ import { formatCurrency } from '@/lib/currency';
 import { buildComparison } from '@/lib/comparison';
 import { useList } from '@/features/list/ListContext';
 import { useMarkets, usePriceMatrix } from '@/features/list/queries';
+import { useCatalogStore } from '@/features/catalog/CatalogContext';
 import { CheapestMarketBanner } from './CheapestMarketBanner';
 
 export function ComparePage() {
   const { items, customPrices } = useList();
+  const { prices: catalogPrices } = useCatalogStore();
   const marketsQuery = useMarkets();
   const matrixQuery = usePriceMatrix();
 
   const markets = useMemo(() => marketsQuery.data ?? [], [marketsQuery.data]);
-  const matrix = useMemo(() => matrixQuery.data ?? {}, [matrixQuery.data]);
+  const matrix = useMemo(
+    () => ({ ...(matrixQuery.data ?? {}), ...catalogPrices }),
+    [matrixQuery.data, catalogPrices],
+  );
 
   const comparison = useMemo(
     () => buildComparison(items, markets, matrix, customPrices),

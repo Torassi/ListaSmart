@@ -39,9 +39,11 @@ export function LoginForm() {
       await login(values);
       const from = (location.state as LocationState | null)?.from?.pathname ?? '/';
       navigate(from, { replace: true });
-    } catch {
-      // Mensagem genérica — não revela detalhes.
-      setFormError('Não foi possível entrar. Verifique seus dados e tente novamente.');
+    } catch (err) {
+      // Mensagem do service (já genérica por segurança) ou fallback.
+      setFormError(
+        err instanceof Error ? err.message : 'Não foi possível entrar. Tente novamente.',
+      );
     }
   }
 

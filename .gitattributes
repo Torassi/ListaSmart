@@ -1,0 +1,11 @@
+# Normaliza quebras de linha: armazena LF no repositório (cross-platform).
+* text=auto eol=lf
+
+# Tratados como binário (sem conversão de EOL).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

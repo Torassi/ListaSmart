@@ -31,6 +31,9 @@ npm install      # instala as dependências
 npm run dev      # ambiente de desenvolvimento (http://localhost:5173)
 ```
 
+**Acesso de teste (mock):** use a conta de demonstração **`demo@listasmart.com`** / **`12345678`**,
+ou crie a sua em **Cadastre-se** (fica registrada localmente). A sessão persiste ao recarregar a página.
+
 ### Scripts
 
 | Script              | Descrição                                          |
@@ -94,12 +97,13 @@ Segurança faz parte da definição de pronto. O que já está aplicado / docume
 - **CSP** de linha de base no [`index.html`](index.html) (em produção, envie pelos headers do servidor).
 - **Variáveis de ambiente** via `.env` (prefixo `VITE_`), com `.env` no `.gitignore`
   (veja [`.env.example`](.env.example)). Nenhum segredo no bundle.
-- **Autenticação** (Etapa 2): hoje é um **mock com estado só em memória** — sem token em
-  localStorage/sessionStorage (vulnerável a XSS). Na integração real, a sessão vem em **cookie
-  httpOnly + Secure + SameSite** definido pelo servidor, com `credentials: 'include'` e header
-  **anti-CSRF** — diretrizes anotadas em [`src/services/http.ts`](src/services/http.ts) e
-  [`src/features/auth/AuthContext.tsx`](src/features/auth/AuthContext.tsx). Como o estado é em memória,
-  um refresh volta para o login (comportamento esperado do mock).
+- **Autenticação** (Etapa 2): hoje é um **mock**. As contas ficam num "banco" local
+  (localStorage, senha com hash trivial só para não guardar em texto puro) e a **sessão persiste**
+  entre refreshes. **Isso é apenas simulação** — em produção, as credenciais são validadas **no
+  servidor** (senha com bcrypt/argon2 no banco) e a sessão vem em **cookie httpOnly + Secure +
+  SameSite**, com `credentials: 'include'` e header **anti-CSRF**. Nada de token/segredo no storage.
+  Diretrizes em [`src/services/http.ts`](src/services/http.ts), [`src/services/auth.ts`](src/services/auth.ts)
+  e [`src/features/auth/AuthContext.tsx`](src/features/auth/AuthContext.tsx).
 - **Controle de acesso**: rotas privadas protegidas por
   [`ProtectedRoute`](src/app/ProtectedRoute.tsx) (redireciona para /login) — apenas UX; a autorização
   real é sempre do servidor.

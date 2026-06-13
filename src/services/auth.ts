@@ -1,49 +1,108 @@
 /**
- * Service de autenticação — MOCK (substituível pela API real, ver `http.ts`).
+ * Service de autenticação — MOCK com "banco" local (substituível pela API real).
+ *
+ * Hoje as contas ficam num "banco" em localStorage só para simular o cadastro/
+ * login de forma realista no front-end. ISTO NÃO É SEGURO e é apenas temporário:
  *
  * SECURITY (como deve ser na integração real):
- * - O back-end valida as credenciais e responde definindo um cookie de sessão
- *   httpOnly + Secure + SameSite. O front NÃO recebe nem guarda o token.
- * - Estas funções só devolvem dados públicos do usuário (perfil) para a UI.
- * - O cliente revalida com zod apenas por UX; a verdade é sempre do servidor.
+ * - As credenciais são verificadas NO SERVIDOR; a senha é guardada com hash forte
+ *   (bcrypt/argon2) no banco — NUNCA em texto puro e NUNCA no navegador.
+ * - Após autenticar, o servidor define um cookie de sessão httpOnly+Secure+SameSite;
+ *   o front não recebe nem armazena o token.
+ * - O hash abaixo é trivial (não-criptográfico), só para evitar guardar a senha
+ *   literal no mock — não use nada parecido em produção.
  */
 import type { LoginInput, SignupInput } from '@/lib/validation';
 import type { User } from '@/types';
 import { delay } from './http';
 
-/** Deriva um nome de exibição a partir do e-mail (só para o mock). */
-function nameFromEmail(email: string): string {
-  const local = email.split('@')[0] ?? 'usuário';
-  return local
-    .replace(/[._-]+/g, ' ')
-    .split(' ')
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
+const USERS_KEY = 'lista-smart:users';
+
+interface StoredAccount extends User {
+  passwordHash: string;
 }
 
-/**
- * Login mockado: aceita qualquer credencial válida (já validada por zod) e
- * devolve um perfil. Na API real, troque por uma chamada que faz o servidor
- * setar o cookie de sessão.
- */
-export async function login({ email }: LoginInput): Promise<User> {
-  const user: User = {
-    id: 'u1',
-    name: nameFromEmail(email),
-    email,
+/** Hash NÃO seguro — apenas evita salvar a senha em texto puro no mock. */
+function hashPassword(password: string): string {
+  let h = 0;
+  for (let i = 0; i < password.length; i++) {
+    h = (h * 31 + password.charCodeAt(i)) | 0;
+  }
+  return `h${h >>> 0}`;
+}
+
+function loadAccounts(): StoredAccount[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(USERS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as StoredAccount[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAccounts(accounts: StoredAccount[]): void {
+  try {
+    window.localStorage.setItem(USERS_KEY, JSON.stringify(accounts));
+  } catch {
+    // storage indisponível — ignora.
+  }
+}
+
+/** Garante uma conta de demonstração para facilitar os testes. */
+function ensureSeed(accounts: StoredAccount[]): StoredAccount[] {
+  if (accounts.length > 0) return accounts;
+  const demo: StoredAccount = {
+    id: 'demo',
+    name: 'Demonstração',
+    email: 'demo@listasmart.com',
+    passwordHash: hashPassword('12345678'),
   };
-  return delay(user, 500);
+  const seeded = [demo];
+  saveAccounts(seeded);
+  return seeded;
 }
 
-/** Cadastro mockado: cria um perfil a partir dos dados do formulário. */
-export async function signup({ name, email }: SignupInput): Promise<User> {
-  const user: User = {
+/** Remove o hash antes de devolver o perfil à aplicação. */
+function toUser(account: StoredAccount): User {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { passwordHash, ...user } = account;
+  return user;
+}
+
+/** Login: valida e-mail + senha contra o "banco" local. */
+export async function login({ email, password }: LoginInput): Promise<User> {
+  const accounts = ensureSeed(loadAccounts());
+  const normalized = email.trim().toLowerCase();
+  const account = accounts.find((a) => a.email.toLowerCase() === normalized);
+
+  // Mensagem genérica de propósito (não revela se o e-mail existe).
+  if (!account || account.passwordHash !== hashPassword(password)) {
+    await delay(null, 400);
+    throw new Error('E-mail ou senha incorretos.');
+  }
+  return delay(toUser(account), 400);
+}
+
+/** Cadastro: registra uma nova conta (e-mail único). */
+export async function signup({ name, email, password }: SignupInput): Promise<User> {
+  const accounts = loadAccounts();
+  const normalized = email.trim().toLowerCase();
+
+  if (accounts.some((a) => a.email.toLowerCase() === normalized)) {
+    await delay(null, 400);
+    throw new Error('Este e-mail já está cadastrado.');
+  }
+
+  const account: StoredAccount = {
     id: `u-${Date.now()}`,
     name,
     email,
+    passwordHash: hashPassword(password),
   };
-  return delay(user, 600);
+  saveAccounts([...accounts, account]);
+  return delay(toUser(account), 500);
 }
 
 /** Logout mockado. Na API real, faz o servidor invalidar/expirar o cookie. */

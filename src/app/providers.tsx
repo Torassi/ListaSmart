@@ -12,6 +12,7 @@ import { ToastProvider } from '@/hooks/useToast';
 import { ListProvider } from '@/features/list/ListContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { PreferencesProvider } from '@/features/profile/PreferencesContext';
+import { CatalogProvider } from '@/features/catalog/CatalogContext';
 
 export function AppProviders({ children }: { children: ReactNode }) {
   // QueryClient criado uma única vez por instância da app.
@@ -32,9 +33,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <PreferencesProvider>
-          <ToastProvider>
-            <ListProvider>{children}</ListProvider>
-          </ToastProvider>
+          <CatalogProvider>
+            <ToastProvider>
+              <ListProvider>{children}</ListProvider>
+            </ToastProvider>
+          </CatalogProvider>
         </PreferencesProvider>
       </AuthProvider>
     </QueryClientProvider>

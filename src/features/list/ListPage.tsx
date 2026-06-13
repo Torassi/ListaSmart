@@ -13,6 +13,7 @@ import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/currency';
 import { resolveRowPrices } from '@/lib/pricing';
 import { collaborators } from '@/services/mockData';
+import { useCatalogStore } from '@/features/catalog/CatalogContext';
 import { useList, useLists } from './ListContext';
 import { useMarkets, usePriceMatrix } from './queries';
 import { QuantityStepper } from './QuantityStepper';
@@ -29,13 +30,18 @@ function normalize(text: string): string {
 export function ListPage() {
   const { items, customPrices, setQuantity, removeItem } = useList();
   const { activeName } = useLists();
+  const { prices: catalogPrices } = useCatalogStore();
   const marketsQuery = useMarkets();
   const matrixQuery = usePriceMatrix();
   const [query, setQuery] = useState('');
   const [slideOpen, setSlideOpen] = useState(false);
 
   const markets = useMemo(() => marketsQuery.data ?? [], [marketsQuery.data]);
-  const matrix = useMemo(() => matrixQuery.data ?? {}, [matrixQuery.data]);
+  // Matriz base (mock) + preços de produtos cadastrados no catálogo.
+  const matrix = useMemo(
+    () => ({ ...(matrixQuery.data ?? {}), ...catalogPrices }),
+    [matrixQuery.data, catalogPrices],
+  );
 
   // Busca por nome, categoria ou código de barras (id, como aproximação do mock).
   const filtered = useMemo(() => {

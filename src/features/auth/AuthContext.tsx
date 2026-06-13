@@ -1,19 +1,34 @@
 /**
  * AuthContext — estado de autenticação da aplicação (mock).
  *
+ * A sessão é persistida em localStorage para sobreviver ao refresh da página
+ * (apenas o PERFIL público — neste mock não há token real).
+ *
  * SECURITY:
- * - O perfil do usuário é mantido APENAS em memória (React state). Não usamos
- *   localStorage/sessionStorage para sessão/token — isso é vulnerável a XSS.
- * - Na integração real, a sessão vive num cookie httpOnly definido pelo servidor;
- *   ao carregar a app, faríamos um `GET /me` (com `credentials: 'include'`) para
- *   reidratar o perfil. Por isso um refresh hoje volta para o login — comportamento
- *   esperado do mock, que demonstra corretamente as rotas protegidas.
+ * - Guardar a sessão em localStorage só é aceitável aqui porque NÃO há token/
+ *   segredo: é um mock. Em produção, NUNCA armazene token de sessão no storage
+ *   (vulnerável a XSS) — use cookie httpOnly+Secure+SameSite definido pelo
+ *   servidor e reidrate o perfil com `GET /me` (`credentials: 'include'`) ao
+ *   carregar a app.
  */
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LoginInput, SignupInput } from '@/lib/validation';
 import type { User } from '@/types';
 import * as authService from '@/services/auth';
+
+const SESSION_KEY = 'lista-smart:session';
+
+/** Carrega o perfil da sessão persistida (mock). */
+function loadSession(): User | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -28,7 +43,17 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(loadSession);
+
+  // Persiste/limpa a sessão (perfil) para sobreviver ao refresh.
+  useEffect(() => {
+    try {
+      if (user) window.localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      else window.localStorage.removeItem(SESSION_KEY);
+    } catch {
+      // storage indisponível — ignora.
+    }
+  }, [user]);
 
   const login = useCallback(async (input: LoginInput) => {
     const u = await authService.login(input);

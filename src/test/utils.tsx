@@ -11,6 +11,7 @@ import { ToastProvider } from '@/hooks/useToast';
 import { ListProvider } from '@/features/list/ListContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { PreferencesProvider } from '@/features/profile/PreferencesContext';
+import { CatalogProvider } from '@/features/catalog/CatalogContext';
 
 function AllProviders({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({
@@ -20,9 +21,11 @@ function AllProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <PreferencesProvider>
-          <ToastProvider>
-            <ListProvider>{children}</ListProvider>
-          </ToastProvider>
+          <CatalogProvider>
+            <ToastProvider>
+              <ListProvider>{children}</ListProvider>
+            </ToastProvider>
+          </CatalogProvider>
         </PreferencesProvider>
       </AuthProvider>
     </QueryClientProvider>
