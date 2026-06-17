@@ -80,9 +80,43 @@ Fonte base: **Manrope** (fallback `Segoe UI`, `system-ui`). Valores monetários 
 ### Camada de dados (mock → API real)
 
 Todos os dados saem de [`src/services`](src/services) (que hoje leem de `mockData.ts` com latência
-simulada). Para plugar o back-end, basta implementar o cliente em
-[`src/services/http.ts`](src/services/http.ts) e trocar o corpo das funções `getX()`, **mantendo as
-assinaturas e os tipos** de [`src/types`](src/types).
+simulada). O cliente HTTP real já existe em [`src/services/http.ts`](src/services/http.ts)
+(`apiGet/apiPost/apiPatch/apiDelete`, com `credentials: 'include'` para o cookie de sessão), e há
+uma camada de services **real e isolada** em [`src/services/api`](src/services/api) cobrindo
+**auth, catálogo, listas, preços e comparação** — com as mesmas assinaturas dos mocks.
+
+Por padrão o app continua nos **mocks** (home/dashboard, analytics, favoritos seguem mockados). Para
+ativar a integração na próxima etapa: suba o back-end, defina `VITE_API_BASE_URL` e troque os imports
+dos consumidores de `@/services/*` para `@/services/api/*`. Detalhes em
+[`src/services/api/index.ts`](src/services/api/index.ts).
+
+---
+
+## Back-end (API)
+
+O back-end MVP vive em [`backend/`](backend) (**FastAPI + SQLAlchemy + SQLite**) e cobre o fluxo
+principal: usuários, catálogo, listas, preços e comparação. Veja
+[`backend/README.md`](backend/README.md) para detalhes.
+
+### Rodar tudo localmente
+
+```bash
+# Terminal 1 — back-end (http://localhost:8000)
+cd backend
+python -m venv .venv && .venv\Scripts\Activate.ps1   # Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+copy .env.example .env                                 # Linux/macOS: cp .env.example .env
+python -m app.seed                                     # cria o schema + dados mockados + usuário demo
+uvicorn app.main:app --reload
+
+# Terminal 2 — front-end (http://localhost:5173)
+npm install
+copy .env.example .env                                 # garanta VITE_API_BASE_URL=http://localhost:8000/api
+npm run dev
+```
+
+O CORS do back-end já libera `http://localhost:5173` e o cookie de sessão é httpOnly. Conta de
+demonstração criada pelo seed: **demo@listasmart.com** / **12345678**.
 
 ---
 
