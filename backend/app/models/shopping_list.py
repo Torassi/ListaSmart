@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -62,6 +63,8 @@ class ListItem(Base):
     __tablename__ = "list_items"
     __table_args__ = (
         UniqueConstraint("list_id", "product_id", name="uq_list_item_product"),
+        # Validação de quantidade no banco: 1 a 999.
+        CheckConstraint("quantity >= 1 AND quantity <= 999", name="ck_list_item_quantity"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -72,6 +75,10 @@ class ListItem(Base):
         ForeignKey("products.id", ondelete="CASCADE"), nullable=False
     )
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
 
     shopping_list: Mapped[ShoppingList] = relationship(back_populates="items")
     product: Mapped[Product] = relationship()

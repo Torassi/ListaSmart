@@ -1,6 +1,7 @@
 /**
- * Service de preços — implementação REAL (back-end FastAPI).
- * Mantém o tipo `PriceMatrix` do mock em `src/services/list.ts`.
+ * Service de preços — implementação REAL (back-end FastAPI), em uso pelo app
+ * (consumido via `@/services/list`, que delega para cá). Reusa o tipo
+ * `PriceMatrix` declarado em `src/services/list.ts`.
  */
 import type { Price } from '@/types';
 import type { PriceMatrix } from '../list';

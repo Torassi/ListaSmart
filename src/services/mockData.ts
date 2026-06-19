@@ -1,9 +1,9 @@
 /**
- * Dados mockados — substituíveis por chamadas reais à API.
+ * Dados mockados — usados apenas pelas partes ainda NÃO integradas à API.
  *
- * Tudo aqui é "rascunho" do que o back-end deverá fornecer. Os `services/*`
- * consomem estes dados hoje; quando a API existir, troca-se apenas a
- * implementação dos services mantendo os tipos de `@/types`.
+ * Catálogo, listas e preços vêm do back-end; o que ainda lê daqui é: analytics
+ * (`analytics.ts`), economia recente e favoritos (`home.ts`) e a lista de
+ * colaboradores exibida na tela de lista. Os tipos seguem `@/types`.
  */
 import type {
   Favorites,

@@ -8,7 +8,7 @@ from app.schemas.comparison import (
 )
 from app.schemas.market import MarketOut
 from app.schemas.price import PriceMatrix, PriceOut, RegisterPriceInput
-from app.schemas.product import ProductOut, ProductWithPrice
+from app.schemas.product import CreateProductInput, ProductOut, ProductWithPrice
 from app.schemas.shopping_list import (
     AddItemInput,
     CreateListInput,
@@ -27,6 +27,7 @@ __all__ = [
     "UpdateProfileInput",
     "ProductOut",
     "ProductWithPrice",
+    "CreateProductInput",
     "MarketOut",
     "PriceOut",
     "PriceMatrix",

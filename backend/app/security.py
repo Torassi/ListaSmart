@@ -1,6 +1,7 @@
-"""Segurança: hash de senha (bcrypt/passlib) e tokens JWT de sessão."""
+"""Segurança: hash de senha (bcrypt/passlib), tokens JWT de sessão e CSRF."""
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -10,6 +11,11 @@ from app.config import settings
 from app.errors import UnauthorizedError
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def generate_csrf_token() -> str:
+    """Gera um token CSRF aleatório (usado no esquema double-submit cookie)."""
+    return secrets.token_urlsafe(32)
 
 
 def hash_password(password: str) -> str:

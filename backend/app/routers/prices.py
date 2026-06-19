@@ -42,7 +42,7 @@ def get_price_matrix(
 def register_price(
     payload: RegisterPriceInput,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> Price:
     """Registra (ou atualiza) o preço manual de um produto em um mercado."""
     if db.get(Product, payload.product_id) is None:
@@ -57,11 +57,13 @@ def register_price(
             market_id=payload.market_id,
             value=payload.value,
             source="manual",
+            created_by=user.id,
         )
         db.add(price)
     else:
         price.value = payload.value
         price.source = "manual"
+        price.created_by = user.id
         price.updated_at = datetime.now(timezone.utc)
 
     db.commit()

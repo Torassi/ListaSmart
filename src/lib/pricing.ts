@@ -1,6 +1,6 @@
 /**
- * Resolução de preços por mercado para um produto, combinando a matriz vinda da
- * API (mock) com os preços informados manualmente pelo usuário.
+ * Resolução de preços por mercado para um produto a partir da matriz de preços
+ * vinda da API (`GET /prices/matrix`), opcionalmente combinada com preços extras.
  * Marca o menor (verde) e o maior (vermelho) preço quando há variação.
  */
 import type { Market } from '@/types';
@@ -17,7 +17,7 @@ export function resolveRowPrices(
   productId: string,
   markets: Market[],
   matrix: PriceMatrix,
-  customPrices: Record<string, Record<string, number>>,
+  customPrices: Record<string, Record<string, number>> = {},
 ): MarketPriceCell[] {
   const raw = markets.map((m) => {
     const value = customPrices[productId]?.[m.id] ?? matrix[productId]?.[m.id] ?? null;

@@ -4,7 +4,7 @@ import { renderWithProviders, screen } from '@/test/utils';
 import { ProtectedRoute } from './ProtectedRoute';
 
 describe('ProtectedRoute', () => {
-  it('redireciona para /login quando não autenticado', () => {
+  it('redireciona para /login quando não autenticado', async () => {
     renderWithProviders(
       <MemoryRouter initialEntries={['/']}>
         <Routes>
@@ -16,8 +16,9 @@ describe('ProtectedRoute', () => {
       </MemoryRouter>,
     );
 
-    // Sem sessão (estado em memória inicia deslogado), deve cair na tela de login.
-    expect(screen.getByText('Tela de login')).toBeInTheDocument();
+    // A sessão é reidratada via GET /auth/me (assíncrono). Sem sessão válida,
+    // após a reidratação deve cair na tela de login.
+    expect(await screen.findByText('Tela de login')).toBeInTheDocument();
     expect(screen.queryByText('Conteúdo protegido')).not.toBeInTheDocument();
   });
 });

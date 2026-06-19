@@ -5,6 +5,8 @@ Cada usuário só acessa/edita as próprias listas. As respostas seguem o contra
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,6 +33,16 @@ def _get_owned_list(db: Session, list_id: str, user: User) -> ShoppingList:
         # Mesma resposta para "não existe" e "não é sua" — não vaza existência.
         raise NotFoundError("Lista não encontrada.")
     return shopping_list
+
+
+def _touch(shopping_list: ShoppingList) -> None:
+    """Marca a lista como atualizada agora.
+
+    Mudanças em ITENS não alteram a linha de `shopping_lists`, então o
+    `onupdate` do modelo não dispara. Atualizamos `updated_at` explicitamente
+    para que a ordenação por atividade recente reflita edições nos itens.
+    """
+    shopping_list.updated_at = datetime.now(timezone.utc)
 
 
 @router.get("", response_model=list[ShoppingListOut])
@@ -123,6 +135,7 @@ def add_item(
             ListItem(product_id=payload.product_id, quantity=payload.quantity)
         )
 
+    _touch(shopping_list)
     db.commit()
     db.refresh(shopping_list)
     return shopping_list
@@ -141,6 +154,7 @@ def update_item_quantity(
     if item is None:
         raise NotFoundError("Item não encontrado na lista.")
     item.quantity = payload.quantity
+    _touch(shopping_list)
     db.commit()
     db.refresh(shopping_list)
     return shopping_list
@@ -158,6 +172,7 @@ def remove_item(
     if item is None:
         raise NotFoundError("Item não encontrado na lista.")
     shopping_list.items.remove(item)
+    _touch(shopping_list)
     db.commit()
     db.refresh(shopping_list)
     return shopping_list
@@ -171,6 +186,7 @@ def clear_list(
 ) -> ShoppingList:
     shopping_list = _get_owned_list(db, list_id, user)
     shopping_list.items.clear()
+    _touch(shopping_list)
     db.commit()
     db.refresh(shopping_list)
     return shopping_list

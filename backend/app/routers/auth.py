@@ -6,7 +6,7 @@ mitigando roubo via XSS.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -15,20 +15,38 @@ from app.deps import get_current_user
 from app.errors import ConflictError, UnauthorizedError
 from app.models import User
 from app.schemas import LoginInput, SignupInput, UpdateProfileInput, UserOut
-from app.security import create_access_token, hash_password, verify_password
+from app.security import (
+    create_access_token,
+    generate_csrf_token,
+    hash_password,
+    verify_password,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _set_session_cookie(response: Response, user_id: str) -> None:
+def _issue_session(response: Response, user_id: str) -> None:
+    """Define a sessão (httpOnly) e o cookie CSRF (legível pelo JS)."""
     token = create_access_token(user_id)
+    max_age = settings.access_token_expire_minutes * 60
     response.set_cookie(
         key=settings.cookie_name,
         value=token,
         httponly=True,
         secure=settings.cookie_secure,
         samesite=settings.cookie_samesite,
-        max_age=settings.access_token_expire_minutes * 60,
+        max_age=max_age,
+        path="/",
+    )
+    # Cookie CSRF: NÃO é httpOnly de propósito — o front precisa lê-lo para
+    # reenviá-lo no header X-CSRF-Token (esquema double-submit).
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=generate_csrf_token(),
+        httponly=False,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+        max_age=max_age,
         path="/",
     )
 
@@ -53,7 +71,7 @@ def signup(
     db.commit()
     db.refresh(user)
 
-    _set_session_cookie(response, user.id)
+    _issue_session(response, user.id)
     return user
 
 
@@ -70,19 +88,36 @@ def login(
     if user is None or not verify_password(payload.password, user.password_hash):
         raise UnauthorizedError("E-mail ou senha incorretos.", code="invalid_credentials")
 
-    _set_session_cookie(response, user.id)
+    _issue_session(response, user.id)
     return user
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(response: Response) -> Response:
     response.delete_cookie(key=settings.cookie_name, path="/")
+    response.delete_cookie(key=settings.csrf_cookie_name, path="/")
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)) -> User:
+def me(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> User:
+    # Garante o cookie CSRF disponível ao front após reidratar a sessão (reload),
+    # mas só o emite se ainda não existir — evita rotacionar o token a cada /me.
+    if not request.cookies.get(settings.csrf_cookie_name):
+        response.set_cookie(
+            key=settings.csrf_cookie_name,
+            value=generate_csrf_token(),
+            httponly=False,
+            secure=settings.cookie_secure,
+            samesite=settings.cookie_samesite,
+            max_age=settings.access_token_expire_minutes * 60,
+            path="/",
+        )
     return current_user
 
 

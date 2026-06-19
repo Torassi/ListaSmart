@@ -1,183 +1,278 @@
-# Lista Smart — Front-end
+# Lista Smart
 
 Plataforma web de **listas de compras colaborativas** com foco em **economia** e
-**comparação de preços** entre supermercados da região (ex.: Giassi, Angeloni, Bistek, Comper).
+**comparação de preços** entre supermercados da região (ex.: Giassi, Angeloni,
+Bistek, Comper).
 
-Interface desktop-first, baseada em grid, com Design System próprio e dados **mockados**
-(sem back-end por enquanto — a camada `services/` é trivialmente substituível por API real).
-
----
-
-## Stack
-
-- **React + Vite + TypeScript** (strict)
-- **React Router** (navegação)
-- **Tailwind CSS v3** — design tokens centralizados em [`tailwind.config.js`](tailwind.config.js)
-- **TanStack Query (React Query)** + **Context API** (estado de servidor + estado global)
-- **react-hook-form + zod** (formulários e validação)
-- **Recharts** (gráficos — usados a partir da Etapa 5)
-- **lucide-react** (ícones)
-- **ESLint + Prettier** (com `prettier-plugin-tailwindcss`)
-- **Vitest + Testing Library** (testes)
+Aplicação **full-stack integrada**: o front-end consome a API real, que persiste
+tudo em SQLite. Apenas alguns widgets de inteligência continuam em mock (ver
+[O que permanece em mock](#o-que-permanece-em-mock)).
 
 ---
 
-## Como rodar
+## Arquitetura atual
 
-Pré-requisitos: **Node 18+** e **npm**.
+- **Front-end:** React + Vite + TypeScript (strict) + **TanStack Query** (estado de servidor) e Context API (estado de UI).
+- **Back-end:** Python + **FastAPI** + **SQLAlchemy 2.0**.
+- **Banco de dados:** **SQLite** (`backend/listasmart.db`).
+- **Evolução do banco:** **Alembic** (única fonte de criação/evolução do schema).
+- **Autenticação:** **JWT** assinado, entregue em **cookie httpOnly** (o token nunca chega ao JavaScript).
+- **Segurança:** proteção **CSRF** por **double-submit cookie** (header `X-CSRF-Token` em métodos que alteram estado), hash de senha com **bcrypt**, cookie `SameSite`/`Secure` configuráveis.
+- **Integrado à API:** autenticação, produtos/catálogo, preços, listas e comparação vêm do SQLite via API.
+- **Ainda em mock / armazenamento local:** analytics, favoritos, economia recente e algumas preferências de perfil (região/mercados favoritos em `localStorage`).
 
-```bash
-npm install      # instala as dependências
-npm run dev      # ambiente de desenvolvimento (http://localhost:5173)
+Outras libs: React Router, Tailwind CSS v3, react-hook-form + zod, Recharts, lucide-react, ESLint + Prettier, Vitest + Testing Library (front); Pydantic v2, passlib + bcrypt, PyJWT (back).
+
+---
+
+## Pré-requisitos
+
+- **Node 18+** e **npm**
+- **Python 3.11+** (o SQLite vem embutido no Python via módulo `sqlite3` — **não precisa instalar separadamente**)
+
+---
+
+## Configuração do front-end (PowerShell)
+
+```powershell
+cd C:\Users\User\Desktop\ListaSmart
+Copy-Item .env.example .env
+npm install
+npm.cmd run dev
 ```
 
-**Acesso de teste (mock):** use a conta de demonstração **`demo@listasmart.com`** / **`12345678`**,
-ou crie a sua em **Cadastre-se** (fica registrada localmente). A sessão persiste ao recarregar a página.
+- Front-end: **http://localhost:5173**
+- O `.env` do front aponta para a API: `VITE_API_BASE_URL=http://localhost:8000/api`
 
-### Scripts
+---
 
-| Script              | Descrição                                          |
-| ------------------- | -------------------------------------------------- |
-| `npm run dev`       | Servidor de desenvolvimento (Vite)                 |
-| `npm run build`     | Type-check (`tsc -b`) + build de produção          |
-| `npm run preview`   | Pré-visualiza o build de produção                  |
-| `npm run lint`      | ESLint                                             |
-| `npm run format`    | Prettier (formata `src/`)                          |
-| `npm run test`      | Testes (Vitest, modo CI)                           |
-| `npm run test:watch`| Testes em modo watch                               |
-| `npm run typecheck` | Verificação de tipos sem emitir                    |
+## Configuração do back-end (PowerShell)
+
+```powershell
+cd C:\Users\User\Desktop\ListaSmart\backend
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+> **Sobre ativar a venv:** caso `.\.venv\Scripts\Activate.ps1` não exista (ou a
+> Execution Policy do PowerShell bloqueie scripts), **não é necessário ativar** o
+> ambiente virtual. Basta chamar os executáveis da venv diretamente:
+>
+> - `.\.venv\Scripts\python.exe`
+> - `.\.venv\Scripts\alembic.exe`
+
+### SECRET_KEY (obrigatória)
+
+O back-end **recusa iniciar** enquanto `SECRET_KEY` estiver vazia, com valor de
+exemplo ou muito curta. Gere um valor forte:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Copie o resultado e **substitua manualmente** o valor de `SECRET_KEY` em
+`backend\.env`. O `backend\.env.example` traz apenas um **placeholder** e deixa
+claro que ele precisa ser trocado.
+
+### Banco SQLite (ordem correta)
+
+```powershell
+.\.venv\Scripts\alembic.exe upgrade head
+.\.venv\Scripts\python.exe -m app.seed
+```
+
+- **Alembic** é a **única fonte** de criação e evolução do schema (`alembic upgrade head` cria todas as tabelas a partir de um banco inexistente).
+- O **seed** **não cria tabelas** — apenas insere os dados iniciais (usuário demo, mercados, catálogo e preços). É **idempotente**: rodar de novo não duplica nada.
+- O arquivo gerado é **`backend/listasmart.db`**.
+- **SQLite não precisa ser instalado** separadamente (usa o `sqlite3` do Python).
+- **Não versionar:** `.env`, `.venv`, `*.db`, `node_modules` e `dist`.
+
+### Recriação do banco em desenvolvimento
+
+Quando o schema mudar e o banco local **não** tiver dados importantes:
+
+```powershell
+Remove-Item .\listasmart.db -ErrorAction SilentlyContinue
+.\.venv\Scripts\alembic.exe upgrade head
+.\.venv\Scripts\python.exe -m app.seed
+```
+
+> ⚠️ **Não** faça isso em produção nem quando houver dados importantes — apague o
+> banco apenas em desenvolvimento descartável.
+
+---
+
+## Execução
+
+**Back-end** (um terminal):
+
+```powershell
+cd C:\Users\User\Desktop\ListaSmart\backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+**Front-end** (outro terminal):
+
+```powershell
+cd C:\Users\User\Desktop\ListaSmart
+npm.cmd run dev
+```
+
+URLs:
+
+- Aplicação: **http://localhost:5173**
+- API: **http://localhost:8000**
+- Swagger (docs): **http://localhost:8000/docs**
+- Healthcheck: **http://localhost:8000/api/health**
+
+> Use **sempre `localhost`** em ambos (front e API). Não misture `localhost` com
+> `127.0.0.1`: para o navegador são origens diferentes, e essa mistura quebra
+> **CORS** e o envio do **cookie** de sessão.
+
+### Conta de demonstração
+
+Criada pelo seed:
+
+- **E-mail:** `demo@listasmart.com`
+- **Senha:** `12345678`
+
+---
+
+## Endpoints (todos sob o prefixo `/api`)
+
+**Autenticação**
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| POST | `/api/auth/signup` | Cadastro (define cookie de sessão + CSRF) |
+| POST | `/api/auth/login` | Login (define cookie de sessão + CSRF) |
+| POST | `/api/auth/logout` | Logout (limpa os cookies) |
+| GET | `/api/auth/me` | Usuário autenticado (reidrata a sessão) |
+| PATCH | `/api/auth/me` | Edição básica do perfil (`name`, `avatarUrl`) |
+
+**Catálogo**
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/products` | Catálogo; filtros `q`, `category`, `barcode` |
+| GET | `/api/products/{id}` | Produto por id |
+| POST | `/api/products` | Cadastro manual de produto (+ preço inicial); requer auth |
+| GET | `/api/categories` | Categorias distintas |
+| GET | `/api/markets` | Supermercados |
+
+**Preços**
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/prices/matrix` | Matriz de preços (`productId`/`marketId` opcionais) |
+| POST | `/api/prices` | Registrar/atualizar preço manual; requer auth |
+
+**Listas** (todas requerem autenticação e validam a propriedade da lista)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/lists` | Listas do usuário (ordenadas por atividade recente) |
+| POST | `/api/lists` | Criar lista |
+| GET | `/api/lists/{id}` | Buscar lista por id |
+| PATCH | `/api/lists/{id}` | Renomear lista |
+| DELETE | `/api/lists/{id}` | Excluir lista |
+| POST | `/api/lists/{id}/items` | Adicionar produto à lista |
+| PATCH | `/api/lists/{id}/items/{productId}` | Alterar quantidade |
+| DELETE | `/api/lists/{id}/items/{productId}` | Remover item |
+| DELETE | `/api/lists/{id}/items` | Limpar a lista |
+| GET | `/api/lists/{id}/comparison` | Comparar a lista entre supermercados |
+
+> Mutações autenticadas exigem o header **`X-CSRF-Token`** (o front lê o cookie
+> CSRF e o reenvia automaticamente). Editar itens atualiza `ShoppingList.updated_at`.
+
+---
+
+## Comparação de preços
+
+- Cada mercado recebe um total e um marcador de **cobertura**: mercados **sem preço para todos os itens** da lista são marcados com **cobertura incompleta** (`complete: false`).
+- **Somente mercados com cobertura completa** disputam o **mais barato** e o **mais caro**.
+- A **economia** (`savedAmount`) é calculada **apenas entre mercados completos** — um mercado com preços parciais nunca é apontado como o mais barato.
+
+---
+
+## Segurança
+
+- **JWT em cookie httpOnly** — o token nunca é exposto ao JavaScript (mitiga XSS); o front usa `credentials: 'include'`.
+- **CSRF (double-submit cookie):** o servidor emite um cookie CSRF legível pelo JS; o front o reenvia no header `X-CSRF-Token` em toda requisição que altera estado. Mutações autenticadas sem o token são rejeitadas (403).
+- **Senhas** com **bcrypt** (passlib); nunca em texto puro.
+- **`SECRET_KEY` obrigatória** via ambiente — a aplicação falha ao iniciar se ausente/fraca/de exemplo.
+- **Cookie configurável:** `COOKIE_SECURE`, `COOKIE_SAMESITE`, `COOKIE_NAME` (em produção HTTPS: `COOKIE_SECURE=true`; domínios distintos: `COOKIE_SAMESITE=none`).
+- **Propriedade das listas** validada em todas as operações privadas (um usuário nunca acessa lista de outro).
+- **Validação com zod** no front é só UX; o servidor (Pydantic + constraints no banco) é a fonte de verdade.
+- Pontos sensíveis estão marcados no código com comentários `SECURITY:`.
+
+---
+
+## O que permanece em mock
+
+Intencionalmente ainda **não** integrados à API (continuam em mock/armazenamento local):
+
+- **Analytics** (dashboard de inteligência) — `src/services/analytics.ts`
+- **Economia recente** e **favoritos** da Home — `src/services/home.ts`
+- **Preferências de perfil** (região e mercados favoritos) — `localStorage` em `src/features/profile/PreferencesContext.tsx`
+
+> `src/services/auth.ts` é um mock **legado** mantido apenas como referência/para
+> seu próprio teste — o app usa `src/services/api/auth.ts` (JWT em cookie httpOnly).
+
+---
+
+## Testes
+
+**Front-end:**
+
+```powershell
+cd C:\Users\User\Desktop\ListaSmart
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run test
+npm.cmd run build
+npm.cmd audit --audit-level=high --omit=dev
+```
+
+**Back-end:**
+
+```powershell
+cd C:\Users\User\Desktop\ListaSmart\backend
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m compileall app tests
+.\.venv\Scripts\alembic.exe upgrade head
+```
+
+Os testes do back-end usam um **SQLite temporário/isolado** (não tocam o banco de
+dev). Os testes do front exercitam o caminho real contexto → service → `fetch`
+contra um **fake backend em memória** (`src/test/fakeBackend.ts`).
+
+---
+
+## CI
+
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em cada push/PR na `main` e valida:
+
+- **Front-end:** lint, typecheck, testes, build e **auditoria de dependências** (`npm audit --audit-level=high`).
+- **Back-end:** testes (`pytest`), **compilação** (`compileall`) e **migrations** (`alembic upgrade head` em um SQLite temporário).
 
 ---
 
 ## Estrutura
 
 ```
-src/
-  app/         # shell (sidebar + topbar), rotas, providers, error boundary
-  components/  # Design System (Button, Input/Field, Card, Badge, Table, KpiCard, Avatar, Toast, ...)
-  features/
-    auth/      # login e cadastro                (Etapa 2 ✅)
-    home/      # dashboard + catálogo de produtos (Etapa 1 ✅)
-    list/      # listas (gestão + múltiplas listas) (Etapas 3, 7 ✅)
-    compare/   # comparador de preços             (Etapa 4 ✅)
-    analytics/ # dashboard de inteligência        (Etapa 5 ✅)
-    profile/   # perfil + preferências            (Etapa 8 ✅)
-  hooks/       # useToast, useDebounce, ...
-  services/    # camada de API isolada (mocks hoje) — getProducts(), getFavorites(), ...
-  lib/         # cn(), formatação de moeda, validação (zod), sanitização
-  styles/      # index.css (diretivas Tailwind + fonte base)
-  types/       # tipagens compartilhadas (rascunho do contrato de dados)
-  test/        # setup e utilitários de teste
+ListaSmart/
+├── src/                      # front-end (React + Vite + TS)
+│   ├── app/                  # shell, rotas, providers, ProtectedRoute
+│   ├── components/           # Design System
+│   ├── features/             # auth, home, list, compare, analytics, profile, catalog
+│   ├── hooks/                # useToast, useDebounce
+│   ├── services/             # services integrados (api/) + mocks remanescentes (analytics, home)
+│   │   └── api/              # cliente real: auth, catalog, lists, prices, comparison
+│   ├── lib/                  # cn, moeda, validação (zod), comparação, preços
+│   ├── test/                 # setup + fake backend dos testes
+│   └── types/                # contratos compartilhados (espelham o back-end)
+├── backend/                  # API (FastAPI + SQLAlchemy + SQLite) — ver backend/README.md
+└── .github/workflows/ci.yml  # CI (front + back)
 ```
-
-### Design tokens
-
-Cores, fontes, raios e sombras vivem em [`tailwind.config.js`](tailwind.config.js) (`theme.extend`)
-e são aplicados via classes utilitárias — **sem valores mágicos** espalhados. Componentes
-recorrentes são compostos com `@apply` em [`src/styles/index.css`](src/styles/index.css).
-Fonte base: **Manrope** (fallback `Segoe UI`, `system-ui`). Valores monetários usam `tabular-nums`.
-
-### Camada de dados (mock → API real)
-
-Todos os dados saem de [`src/services`](src/services) (que hoje leem de `mockData.ts` com latência
-simulada). O cliente HTTP real já existe em [`src/services/http.ts`](src/services/http.ts)
-(`apiGet/apiPost/apiPatch/apiDelete`, com `credentials: 'include'` para o cookie de sessão), e há
-uma camada de services **real e isolada** em [`src/services/api`](src/services/api) cobrindo
-**auth, catálogo, listas, preços e comparação** — com as mesmas assinaturas dos mocks.
-
-Por padrão o app continua nos **mocks** (home/dashboard, analytics, favoritos seguem mockados). Para
-ativar a integração na próxima etapa: suba o back-end, defina `VITE_API_BASE_URL` e troque os imports
-dos consumidores de `@/services/*` para `@/services/api/*`. Detalhes em
-[`src/services/api/index.ts`](src/services/api/index.ts).
-
----
-
-## Back-end (API)
-
-O back-end MVP vive em [`backend/`](backend) (**FastAPI + SQLAlchemy + SQLite**) e cobre o fluxo
-principal: usuários, catálogo, listas, preços e comparação. Veja
-[`backend/README.md`](backend/README.md) para detalhes.
-
-### Rodar tudo localmente
-
-```bash
-# Terminal 1 — back-end (http://localhost:8000)
-cd backend
-python -m venv .venv && .venv\Scripts\Activate.ps1   # Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt
-copy .env.example .env                                 # Linux/macOS: cp .env.example .env
-python -m app.seed                                     # cria o schema + dados mockados + usuário demo
-uvicorn app.main:app --reload
-
-# Terminal 2 — front-end (http://localhost:5173)
-npm install
-copy .env.example .env                                 # garanta VITE_API_BASE_URL=http://localhost:8000/api
-npm run dev
-```
-
-O CORS do back-end já libera `http://localhost:5173` e o cookie de sessão é httpOnly. Conta de
-demonstração criada pelo seed: **demo@listasmart.com** / **12345678**.
-
----
-
-## Segurança
-
-Segurança faz parte da definição de pronto. O que já está aplicado / documentado:
-
-- **Validação de entrada com zod** ([`src/lib/validation.ts`](src/lib/validation.ts)) — com a ressalva
-  explícita de que **o cliente não é fonte de verdade**: o servidor deve revalidar tudo.
-- **Anti-XSS**: nada de `dangerouslySetInnerHTML`; URLs de imagem passam por `safeUrl()`
-  ([`src/lib/sanitize.ts`](src/lib/sanitize.ts)); React escapa o conteúdo por padrão.
-- **CSP** de linha de base no [`index.html`](index.html) (em produção, envie pelos headers do servidor).
-- **Variáveis de ambiente** via `.env` (prefixo `VITE_`), com `.env` no `.gitignore`
-  (veja [`.env.example`](.env.example)). Nenhum segredo no bundle.
-- **Autenticação** (Etapa 2): hoje é um **mock**. As contas ficam num "banco" local
-  (localStorage, senha com hash trivial só para não guardar em texto puro) e a **sessão persiste**
-  entre refreshes. **Isso é apenas simulação** — em produção, as credenciais são validadas **no
-  servidor** (senha com bcrypt/argon2 no banco) e a sessão vem em **cookie httpOnly + Secure +
-  SameSite**, com `credentials: 'include'` e header **anti-CSRF**. Nada de token/segredo no storage.
-  Diretrizes em [`src/services/http.ts`](src/services/http.ts), [`src/services/auth.ts`](src/services/auth.ts)
-  e [`src/features/auth/AuthContext.tsx`](src/features/auth/AuthContext.tsx).
-- **Controle de acesso**: rotas privadas protegidas por
-  [`ProtectedRoute`](src/app/ProtectedRoute.tsx) (redireciona para /login) — apenas UX; a autorização
-  real é sempre do servidor.
-- **Tratamento de erros** sem vazar detalhes internos ([`src/app/ErrorBoundary.tsx`](src/app/ErrorBoundary.tsx)).
-- **Dependências**: versões fixadas via `package-lock.json`; rode `npm audit` periodicamente.
-
-Pontos sensíveis estão marcados no código com comentários `SECURITY:`.
-
-### Sobre o `npm audit` (estado atual)
-
-O `npm audit` aponta avisos **somente na cadeia de ferramentas de desenvolvimento**
-(`esbuild` → `vite` → `vitest`/`vite-node`):
-
-- `esbuild`/`vite` (moderado): afeta apenas o **servidor de desenvolvimento** local.
-- `vitest` (crítico): só explorável com o **Vitest UI server** ativo — recurso que **não usamos**.
-
-**Nenhum desses pacotes vai para o bundle de produção** (`dist/`), então não há exposição em runtime
-para o usuário final. O `npm audit fix --force` só resolve subindo para **Vite 8 / Vitest 4** (mudanças
-_major_); essa atualização ficará para uma etapa de manutenção dedicada, com a suíte de testes validando
-a migração. Em produção, o build é estático e deve ser servido por HTTPS atrás de uma CDN/servidor que
-aplique os headers de segurança.
-
----
-
-## Roadmap (entrega por etapas)
-
-- [x] **Etapa 1** — Setup, Design System e **Home com catálogo de produtos**
-- [x] **Etapa 2** — Autenticação (login/cadastro split + login social) + rotas protegidas
-- [x] **Etapa 3** — Gestão da lista + slide-over de produto/preço
-- [x] **Etapa 4** — Comparador de preços
-- [x] **Etapa 5** — Dashboard de inteligência (analytics)
-- [x] **Etapa 6** — Polimento (responsividade, acessibilidade, revisão de segurança)
-- [x] **Etapa 7** — Múltiplas listas (criar/renomear/excluir/alternar) com persistência local
-- [x] **Etapa 8** — Perfil & preferências (nome, região, mercados favoritos)
-- [x] **Etapa 9** — Busca por código de barras + estados de erro/retry nas telas
-- [x] **Etapa 10** — Hardening: CI (GitHub Actions), testes adicionais, revisão final
-
-> **Persistência local**: listas e preferências são salvas em `localStorage` por serem
-> **dados não sensíveis**. Sessão/token NUNCA usam storage (ver Segurança). Quando o
-> back-end existir, esses dados migram para o perfil do usuário no servidor.
-
-> **CI**: o workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda lint,
-> typecheck, testes, build e `npm audit` (high+) a cada push/PR na `main`.

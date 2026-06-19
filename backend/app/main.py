@@ -9,8 +9,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.csrf import CSRFMiddleware
 from app.errors import register_error_handlers
-from app.routers import auth, catalog, comparison, lists, prices
+from app.routers import auth, catalog, comparison, lists, prices, products
 
 app = FastAPI(
     title="Lista Smart API",
@@ -18,6 +19,9 @@ app = FastAPI(
     description="Backend MVP do Lista Smart (usuários, catálogo, listas, preços e comparação).",
 )
 
+# A ordem importa: o CSRF roda DENTRO do CORS (adicionado por último = mais
+# externo), para que respostas 403 de CSRF também recebam os headers de CORS.
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -31,6 +35,7 @@ register_error_handlers(app)
 API_PREFIX = "/api"
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(catalog.router, prefix=API_PREFIX)
+app.include_router(products.router, prefix=API_PREFIX)
 app.include_router(lists.router, prefix=API_PREFIX)
 app.include_router(prices.router, prefix=API_PREFIX)
 app.include_router(comparison.router, prefix=API_PREFIX)

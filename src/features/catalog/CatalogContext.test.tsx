@@ -1,37 +1,62 @@
 import { describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CatalogProvider, useCatalogStore } from './CatalogContext';
+import { getPriceMatrix, getProducts } from '@/services';
+import { seedSession } from '@/test/fakeBackend';
 
-function wrapper({ children }: { children: ReactNode }) {
-  return <CatalogProvider>{children}</CatalogProvider>;
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={qc}>
+        <CatalogProvider>{children}</CatalogProvider>
+      </QueryClientProvider>
+    );
+  };
 }
 
-describe('CatalogContext', () => {
-  it('inicia sem produtos customizados', () => {
-    const { result } = renderHook(() => useCatalogStore(), { wrapper });
-    expect(result.current.products).toHaveLength(0);
-  });
+describe('CatalogContext (integrado à API)', () => {
+  it('cadastra produto no catálogo, persiste e registra o preço por mercado', async () => {
+    seedSession(); // POST /products exige autenticação
+    const { result } = renderHook(() => useCatalogStore(), { wrapper: makeWrapper() });
 
-  it('adiciona produto ao catálogo e registra o preço por mercado', () => {
-    const { result } = renderHook(() => useCatalogStore(), { wrapper });
-
-    let createdId = '';
-    act(() => {
-      const product = result.current.addProduct({
-        name: 'Aveia em Flocos',
-        category: 'Mercearia',
-        unit: '500 g',
-        barcode: '7891234567890',
-        marketId: 'giassi',
-        price: 8.49,
-      });
-      createdId = product.id;
+    const created = await result.current.addProduct({
+      name: 'Aveia em Flocos',
+      category: 'Mercearia',
+      unit: '500 g',
+      barcode: '7891234567890',
+      marketId: 'giassi',
+      price: 8.49,
     });
 
-    expect(result.current.products).toHaveLength(1);
-    expect(result.current.products[0].name).toBe('Aveia em Flocos');
-    expect(result.current.products[0].barcode).toBe('7891234567890');
-    expect(result.current.prices[createdId].giassi).toBe(8.49);
+    expect(created.name).toBe('Aveia em Flocos');
+    expect(created.barcode).toBe('7891234567890');
+
+    // Persistido no catálogo (GET /products) com o preço inicial (GET /prices/matrix).
+    const products = await getProducts({ barcode: '7891234567890' });
+    expect(products).toHaveLength(1);
+    expect(products[0].id).toBe(created.id);
+
+    const matrix = await getPriceMatrix();
+    expect(matrix[created.id].giassi).toBe(8.49);
+  });
+
+  it('impede código de barras duplicado', async () => {
+    seedSession();
+    const { result } = renderHook(() => useCatalogStore(), { wrapper: makeWrapper() });
+
+    // 7891000000000 já pertence ao produto "p1" do fake backend.
+    await expect(
+      result.current.addProduct({
+        name: 'Repetido',
+        category: 'Mercearia',
+        unit: 'unidade',
+        barcode: '7891000000000',
+        marketId: 'giassi',
+        price: 1,
+      }),
+    ).rejects.toThrow();
   });
 });

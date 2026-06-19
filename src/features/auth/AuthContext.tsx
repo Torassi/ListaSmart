@@ -1,82 +1,85 @@
 /**
- * AuthContext — estado de autenticação da aplicação (mock).
+ * AuthContext — estado de autenticação (INTEGRADO ao back-end).
  *
- * A sessão é persistida em localStorage para sobreviver ao refresh da página
- * (apenas o PERFIL público — neste mock não há token real).
- *
- * SECURITY:
- * - Guardar a sessão em localStorage só é aceitável aqui porque NÃO há token/
- *   segredo: é um mock. Em produção, NUNCA armazene token de sessão no storage
- *   (vulnerável a XSS) — use cookie httpOnly+Secure+SameSite definido pelo
- *   servidor e reidrate o perfil com `GET /me` (`credentials: 'include'`) ao
- *   carregar a app.
+ * - A sessão é mantida em cookie httpOnly definido pelo servidor; o token NUNCA
+ *   chega ao JavaScript e NADA de sessão é guardado em localStorage.
+ * - Ao carregar a app, o perfil é reidratado via `GET /auth/me`
+ *   (`credentials: 'include'`). Enquanto isso, `isInitializing` é true para
+ *   evitar piscar a tela de login para quem já está autenticado.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LoginInput, SignupInput } from '@/lib/validation';
 import type { User } from '@/types';
-import * as authService from '@/services/auth';
-
-const SESSION_KEY = 'lista-smart:session';
-
-/** Carrega o perfil da sessão persistida (mock). */
-function loadSession(): User | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as User) : null;
-  } catch {
-    return null;
-  }
-}
+import * as authApi from '@/services/api/auth';
 
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
+  /** True enquanto a sessão é reidratada via GET /auth/me ao carregar a app. */
+  isInitializing: boolean;
   login: (input: LoginInput) => Promise<void>;
   signup: (input: SignupInput) => Promise<void>;
   logout: () => Promise<void>;
-  /** Atualiza dados do perfil em memória (ex.: nome editado na tela de perfil). */
-  updateUser: (patch: Partial<Pick<User, 'name'>>) => void;
+  /** Atualiza o perfil (persiste via PATCH /auth/me) e reflete em memória. */
+  updateUser: (patch: Partial<Pick<User, 'name' | 'avatarUrl'>>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(loadSession);
+  const [user, setUser] = useState<User | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-  // Persiste/limpa a sessão (perfil) para sobreviver ao refresh.
+  // Reidrata a sessão a partir do cookie httpOnly ao montar.
   useEffect(() => {
-    try {
-      if (user) window.localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-      else window.localStorage.removeItem(SESSION_KEY);
-    } catch {
-      // storage indisponível — ignora.
-    }
-  }, [user]);
+    let active = true;
+    authApi
+      .getCurrentUser()
+      .then((u) => {
+        if (active) setUser(u);
+      })
+      .catch(() => {
+        if (active) setUser(null); // sem sessão válida
+      })
+      .finally(() => {
+        if (active) setIsInitializing(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const login = useCallback(async (input: LoginInput) => {
-    const u = await authService.login(input);
-    setUser(u);
+    setUser(await authApi.login(input));
   }, []);
 
   const signup = useCallback(async (input: SignupInput) => {
-    const u = await authService.signup(input);
-    setUser(u);
+    setUser(await authApi.signup(input));
   }, []);
 
   const logout = useCallback(async () => {
-    await authService.logout();
+    await authApi.logout();
     setUser(null);
   }, []);
 
-  const updateUser = useCallback((patch: Partial<Pick<User, 'name'>>) => {
+  const updateUser = useCallback((patch: Partial<Pick<User, 'name' | 'avatarUrl'>>) => {
     setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+    // Persiste no servidor; falhas não derrubam a UI (otimista).
+    void authApi.updateProfile(patch).catch(() => undefined);
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: user !== null, login, signup, logout, updateUser }),
-    [user, login, signup, logout, updateUser],
+    () => ({
+      user,
+      isAuthenticated: user !== null,
+      isInitializing,
+      login,
+      signup,
+      logout,
+      updateUser,
+    }),
+    [user, isInitializing, login, signup, logout, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,7 +1,15 @@
 """Testes do fluxo principal: auth, catálogo, listas, preços e comparação."""
 from __future__ import annotations
 
+import time
+from datetime import datetime
+
 from fastapi.testclient import TestClient
+
+
+def _parsed(iso: str) -> datetime:
+    """Converte o timestamp ISO devolvido pela API em datetime para comparar."""
+    return datetime.fromisoformat(iso.replace("Z", "+00:00"))
 
 
 # --------------------------------------------------------------------------- #
@@ -184,3 +192,208 @@ def test_compare_list(auth_client: TestClient) -> None:
     row = comp["rows"][0]
     cheapest_cell = next(c for c in row["cells"] if c["marketId"] == "bistek")
     assert cheapest_cell["isCheapest"] is True
+
+    # ambos os mercados têm preço para todos os itens → cobertura completa
+    totals_by_market = {t["marketId"]: t for t in comp["totals"]}
+    assert totals_by_market["giassi"]["complete"] is True
+    assert totals_by_market["bistek"]["complete"] is True
+
+
+def test_comparison_ignores_incomplete_markets(auth_client: TestClient) -> None:
+    """Mercado sem preço para TODOS os itens não pode ser o "mais barato"."""
+    # Produto novo com preço APENAS na giassi (bistek fica sem cobertura).
+    created = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Produto Exclusivo",
+            "category": "Mercearia",
+            "unit": "unidade",
+            "marketId": "giassi",
+            "price": 3.00,
+        },
+    )
+    assert created.status_code == 201, created.text
+    pid = created.json()["id"]
+
+    list_id = auth_client.post("/api/lists", json={"name": "Cobertura"}).json()["id"]
+    auth_client.post(f"/api/lists/{list_id}/items", json={"productId": "p1"})
+    auth_client.post(f"/api/lists/{list_id}/items", json={"productId": pid})
+
+    comp = auth_client.get(f"/api/lists/{list_id}/comparison").json()
+    totals = {t["marketId"]: t for t in comp["totals"]}
+
+    # giassi tem p1 e o produto exclusivo → completo; bistek só tem p1 → incompleto.
+    assert totals["giassi"]["complete"] is True
+    assert totals["bistek"]["complete"] is False
+    assert totals["bistek"]["total"] > 0  # bistek tem total parcial...
+
+    # ...mas, por não ter cobertura completa, NÃO pode ser escolhido.
+    assert comp["cheapestMarketId"] == "giassi"
+    assert comp["mostExpensiveMarketId"] == "giassi"
+    assert comp["savedAmount"] == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# updatedAt / ordenação por atividade recente
+# --------------------------------------------------------------------------- #
+def test_updated_at_changes_on_item_mutations(auth_client: TestClient) -> None:
+    created = auth_client.post("/api/lists", json={"name": "Atividade"}).json()
+    list_id = created["id"]
+    t_created = _parsed(created["updatedAt"])
+
+    time.sleep(0.01)
+    added = auth_client.post(
+        f"/api/lists/{list_id}/items", json={"productId": "p1"}
+    ).json()
+    assert _parsed(added["updatedAt"]) > t_created
+
+    time.sleep(0.01)
+    changed = auth_client.patch(
+        f"/api/lists/{list_id}/items/p1", json={"quantity": 3}
+    ).json()
+    assert _parsed(changed["updatedAt"]) > _parsed(added["updatedAt"])
+
+    time.sleep(0.01)
+    removed = auth_client.delete(f"/api/lists/{list_id}/items/p1").json()
+    assert _parsed(removed["updatedAt"]) > _parsed(changed["updatedAt"])
+
+    time.sleep(0.01)
+    auth_client.post(f"/api/lists/{list_id}/items", json={"productId": "p2"})
+    before_clear = auth_client.get(f"/api/lists/{list_id}").json()["updatedAt"]
+    time.sleep(0.01)
+    cleared = auth_client.delete(f"/api/lists/{list_id}/items").json()
+    assert _parsed(cleared["updatedAt"]) > _parsed(before_clear)
+
+
+def test_lists_ordered_by_recent_activity(auth_client: TestClient) -> None:
+    a = auth_client.post("/api/lists", json={"name": "A"}).json()["id"]
+    time.sleep(0.01)
+    b = auth_client.post("/api/lists", json={"name": "B"}).json()["id"]
+
+    # B é a mais recente → aparece primeiro.
+    order = [item["id"] for item in auth_client.get("/api/lists").json()]
+    assert order[0] == b
+
+    # Mexer em A (adicionar item) deve trazê-la para o topo.
+    time.sleep(0.01)
+    auth_client.post(f"/api/lists/{a}/items", json={"productId": "p1"})
+    order2 = [item["id"] for item in auth_client.get("/api/lists").json()]
+    assert order2[0] == a
+
+
+# --------------------------------------------------------------------------- #
+# Cadastro manual de produto (POST /products)
+# --------------------------------------------------------------------------- #
+def test_create_product_with_initial_price(auth_client: TestClient) -> None:
+    res = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Arroz Integral",
+            "category": "Mercearia",
+            "unit": "1 kg",
+            "barcode": "7899999999999",
+            "marketId": "giassi",
+            "price": 12.5,
+        },
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["name"] == "Arroz Integral"
+    assert body["lowestPrice"] == 12.5
+    pid = body["id"]
+
+    # Aparece no catálogo (busca por código de barras).
+    found = auth_client.get("/api/products", params={"barcode": "7899999999999"}).json()
+    assert len(found) == 1 and found[0]["id"] == pid
+
+    # Preço inicial registrado na matriz.
+    matrix = auth_client.get("/api/prices/matrix").json()
+    assert matrix[pid]["giassi"] == 12.5
+
+
+def test_create_product_duplicate_barcode(auth_client: TestClient) -> None:
+    # 7891000000000 é o código de barras de p1 (ver conftest).
+    res = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Outro Produto",
+            "category": "Mercearia",
+            "unit": "unidade",
+            "barcode": "7891000000000",
+            "marketId": "giassi",
+            "price": 1.0,
+        },
+    )
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "barcode_taken"
+
+
+def test_create_product_requires_auth(client: TestClient) -> None:
+    res = client.post(
+        "/api/products",
+        json={
+            "name": "Sem Login",
+            "category": "Mercearia",
+            "unit": "unidade",
+            "marketId": "giassi",
+            "price": 1.0,
+        },
+    )
+    assert res.status_code == 401
+
+
+def test_create_product_invalid_category(auth_client: TestClient) -> None:
+    res = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Categoria Errada",
+            "category": "Inexistente",
+            "unit": "unidade",
+            "marketId": "giassi",
+            "price": 1.0,
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_create_product_unknown_market(auth_client: TestClient) -> None:
+    res = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Mercado Errado",
+            "category": "Mercearia",
+            "unit": "unidade",
+            "marketId": "nao-existe",
+            "price": 1.0,
+        },
+    )
+    assert res.status_code == 404
+
+
+def test_create_product_invalid_barcode(auth_client: TestClient) -> None:
+    res = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Barcode Curto",
+            "category": "Mercearia",
+            "unit": "unidade",
+            "barcode": "123",
+            "marketId": "giassi",
+            "price": 1.0,
+        },
+    )
+    assert res.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# CSRF
+# --------------------------------------------------------------------------- #
+def test_csrf_blocks_authenticated_state_change_without_token(
+    auth_client: TestClient,
+) -> None:
+    # Sobrescreve o header CSRF com vazio para simular requisição sem token.
+    res = auth_client.post(
+        "/api/lists", json={"name": "Sem CSRF"}, headers={"X-CSRF-Token": ""}
+    )
+    assert res.status_code == 403
+    assert res.json()["error"]["code"] == "csrf_failed"

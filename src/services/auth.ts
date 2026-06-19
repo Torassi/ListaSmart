@@ -1,16 +1,14 @@
 /**
- * Service de autenticação — MOCK com "banco" local (substituível pela API real).
+ * Service de autenticação — MOCK LEGADO (NÃO usado pela aplicação).
  *
- * Hoje as contas ficam num "banco" em localStorage só para simular o cadastro/
- * login de forma realista no front-end. ISTO NÃO É SEGURO e é apenas temporário:
+ * O app autentica pela API real em `src/services/api/auth.ts` (JWT em cookie
+ * httpOnly + CSRF). Este arquivo permanece apenas como referência histórica e
+ * para seu próprio teste unitário (`auth.test.ts`).
  *
- * SECURITY (como deve ser na integração real):
- * - As credenciais são verificadas NO SERVIDOR; a senha é guardada com hash forte
- *   (bcrypt/argon2) no banco — NUNCA em texto puro e NUNCA no navegador.
- * - Após autenticar, o servidor define um cookie de sessão httpOnly+Secure+SameSite;
- *   o front não recebe nem armazena o token.
- * - O hash abaixo é trivial (não-criptográfico), só para evitar guardar a senha
- *   literal no mock — não use nada parecido em produção.
+ * Aqui as contas ficam num "banco" em localStorage com hash trivial — ISTO NÃO
+ * É SEGURO e nunca deve ser usado em produção. Na implementação real (já em uso):
+ * - credenciais verificadas NO SERVIDOR; senha com bcrypt no banco;
+ * - sessão em cookie httpOnly + Secure + SameSite; o front não armazena o token.
  */
 import type { LoginInput, SignupInput } from '@/lib/validation';
 import type { User } from '@/types';

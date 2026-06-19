@@ -13,7 +13,6 @@ import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/currency';
 import { resolveRowPrices } from '@/lib/pricing';
 import { collaborators } from '@/services/mockData';
-import { useCatalogStore } from '@/features/catalog/CatalogContext';
 import { useList, useLists } from './ListContext';
 import { useMarkets, usePriceMatrix } from './queries';
 import { QuantityStepper } from './QuantityStepper';
@@ -28,22 +27,18 @@ function normalize(text: string): string {
 }
 
 export function ListPage() {
-  const { items, customPrices, setQuantity, removeItem } = useList();
+  const { items, setQuantity, removeItem } = useList();
   const { activeName } = useLists();
-  const { prices: catalogPrices } = useCatalogStore();
   const marketsQuery = useMarkets();
   const matrixQuery = usePriceMatrix();
   const [query, setQuery] = useState('');
   const [slideOpen, setSlideOpen] = useState(false);
 
   const markets = useMemo(() => marketsQuery.data ?? [], [marketsQuery.data]);
-  // Matriz base (mock) + preços de produtos cadastrados no catálogo.
-  const matrix = useMemo(
-    () => ({ ...(matrixQuery.data ?? {}), ...catalogPrices }),
-    [matrixQuery.data, catalogPrices],
-  );
+  // Matriz de preços vinda da API (inclui preços manuais já registrados).
+  const matrix = useMemo(() => matrixQuery.data ?? {}, [matrixQuery.data]);
 
-  // Busca por nome, categoria ou código de barras (id, como aproximação do mock).
+  // Busca local nos itens da lista por nome, categoria ou código de barras.
   const filtered = useMemo(() => {
     const term = normalize(query.trim());
     if (!term) return items;
@@ -59,13 +54,13 @@ export function ListPage() {
   const totals = useMemo(() => {
     const map: Record<string, number> = {};
     for (const item of items) {
-      const cells = resolveRowPrices(item.product.id, markets, matrix, customPrices);
+      const cells = resolveRowPrices(item.product.id, markets, matrix);
       for (const cell of cells) {
         if (cell.value != null) map[cell.marketId] = (map[cell.marketId] ?? 0) + cell.value * item.quantity;
       }
     }
     return map;
-  }, [items, markets, matrix, customPrices]);
+  }, [items, markets, matrix]);
 
   const totalValues = Object.values(totals);
   const cheapestTotal = totalValues.length ? Math.min(...totalValues) : null;
@@ -131,7 +126,7 @@ export function ListPage() {
               </thead>
               <tbody>
                 {filtered.map((item) => {
-                  const cells = resolveRowPrices(item.product.id, markets, matrix, customPrices);
+                  const cells = resolveRowPrices(item.product.id, markets, matrix);
                   return (
                     <tr key={item.product.id} className="border-b border-border last:border-0">
                       <td className="px-4 py-3">

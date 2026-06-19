@@ -1,179 +1,32 @@
 /**
- * Estado global de listas de compras (Context API + useReducer).
+ * Estado de listas de compras — INTEGRADO ao back-end.
  *
- * Gerencia VÁRIAS listas nomeadas; cada uma tem seus itens (produto + quantidade)
- * e os preços informados manualmente (`customPrices`). Expõe dois hooks:
- *  - `useList()`  → opera na lista ATIVA (mesma API das etapas anteriores).
+ * As listas e seus itens são persistidos no servidor (`/lists`). O React Query
+ * cuida do cache; as mutações chamam a API e invalidam a query `['lists']`.
+ *
+ * Mantém a mesma API de hooks das etapas anteriores para minimizar mudanças nas
+ * telas:
+ *  - `useList()`  → opera na lista ATIVA (itens + quantidade).
  *  - `useLists()` → gerencia a coleção (criar/renomear/excluir/selecionar).
  *
- * Persistência: o estado é salvo em localStorage. Isso é aceitável porque são
- * DADOS NÃO SENSÍVEIS (itens de compra) — diferente de tokens de sessão, que
- * nunca devem ir para o storage (ver AuthContext). O back-end real assumirá a
- * persistência/sincronização entre dispositivos.
+ * Nada é guardado em localStorage: a fonte de verdade é o back-end. Apenas o id
+ * da lista ATIVA (preferência de UI, não sensível) vive em memória.
  */
-import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { ListItem, Product } from '@/types';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ListItem, Product, ShoppingList } from '@/types';
 import type { ProductPriceInput } from '@/lib/validation';
-import { productPlaceholder } from '@/lib/placeholder';
+import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/features/auth/AuthContext';
+import * as listsApi from '@/services/api/lists';
+import { createProduct } from '@/services/api/catalog';
 
-type CustomPrices = Record<string, Record<string, number>>;
-
-interface StoredList {
-  id: string;
-  name: string;
-  items: ListItem[];
-  customPrices: CustomPrices;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ListsState {
-  lists: StoredList[];
-  activeId: string;
-}
-
-const STORAGE_KEY = 'lista-smart:lists';
-
-function now(): string {
-  return new Date().toISOString();
-}
-
-function makeList(name: string): StoredList {
-  const ts = now();
-  return {
-    id: `list-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    name,
-    items: [],
-    customPrices: {},
-    createdAt: ts,
-    updatedAt: ts,
-  };
-}
-
-function defaultState(): ListsState {
-  const first = makeList('Minha lista');
-  return { lists: [first], activeId: first.id };
-}
-
-/** Carrega o estado do localStorage (com validação defensiva). */
-function loadState(): ListsState {
-  if (typeof window === 'undefined') return defaultState();
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    const parsed = JSON.parse(raw) as ListsState;
-    if (!Array.isArray(parsed.lists) || parsed.lists.length === 0) return defaultState();
-    const activeExists = parsed.lists.some((l) => l.id === parsed.activeId);
-    return { lists: parsed.lists, activeId: activeExists ? parsed.activeId : parsed.lists[0].id };
-  } catch {
-    return defaultState();
-  }
-}
-
-type ListAction =
-  | { type: 'ADD'; product: Product; quantity?: number }
-  | { type: 'ADD_MANUAL'; input: ProductPriceInput }
-  | { type: 'SET_QUANTITY'; productId: string; quantity: number }
-  | { type: 'REMOVE'; productId: string }
-  | { type: 'CLEAR' }
-  | { type: 'CREATE_LIST'; name: string; id: string }
-  | { type: 'RENAME_LIST'; id: string; name: string }
-  | { type: 'DELETE_LIST'; id: string }
-  | { type: 'SELECT_LIST'; id: string };
-
-/** Aplica `fn` à lista ativa, atualizando o timestamp. */
-function updateActive(state: ListsState, fn: (list: StoredList) => StoredList): ListsState {
-  return {
-    ...state,
-    lists: state.lists.map((l) => (l.id === state.activeId ? { ...fn(l), updatedAt: now() } : l)),
-  };
-}
-
-function listsReducer(state: ListsState, action: ListAction): ListsState {
-  switch (action.type) {
-    case 'ADD':
-      return updateActive(state, (list) => {
-        const qty = action.quantity ?? 1;
-        const existing = list.items.find((i) => i.product.id === action.product.id);
-        const items = existing
-          ? list.items.map((i) =>
-              i.product.id === action.product.id ? { ...i, quantity: i.quantity + qty } : i,
-            )
-          : [...list.items, { product: action.product, quantity: qty }];
-        return { ...list, items };
-      });
-
-    case 'ADD_MANUAL':
-      return updateActive(state, (list) => {
-        const { input } = action;
-        const product: Product = {
-          id: `manual-${Date.now()}`,
-          name: input.name,
-          category: input.category,
-          unit: 'unidade',
-          imageUrl: productPlaceholder('🛒'),
-        };
-        return {
-          ...list,
-          items: [...list.items, { product, quantity: input.quantity }],
-          customPrices: { ...list.customPrices, [product.id]: { [input.marketId]: input.price } },
-        };
-      });
-
-    case 'SET_QUANTITY':
-      return updateActive(state, (list) => ({
-        ...list,
-        items:
-          action.quantity <= 0
-            ? list.items.filter((i) => i.product.id !== action.productId)
-            : list.items.map((i) =>
-                i.product.id === action.productId ? { ...i, quantity: action.quantity } : i,
-              ),
-      }));
-
-    case 'REMOVE':
-      return updateActive(state, (list) => ({
-        ...list,
-        items: list.items.filter((i) => i.product.id !== action.productId),
-      }));
-
-    case 'CLEAR':
-      return updateActive(state, (list) => ({ ...list, items: [], customPrices: {} }));
-
-    case 'CREATE_LIST': {
-      const created: StoredList = { ...makeList(action.name), id: action.id };
-      return { lists: [...state.lists, created], activeId: created.id };
-    }
-
-    case 'RENAME_LIST':
-      return {
-        ...state,
-        lists: state.lists.map((l) =>
-          l.id === action.id ? { ...l, name: action.name, updatedAt: now() } : l,
-        ),
-      };
-
-    case 'DELETE_LIST': {
-      const remaining = state.lists.filter((l) => l.id !== action.id);
-      // Nunca deixa zero listas: recria uma vazia se necessário.
-      const lists = remaining.length > 0 ? remaining : [makeList('Minha lista')];
-      const activeId = lists.some((l) => l.id === state.activeId) ? state.activeId : lists[0].id;
-      return { lists, activeId };
-    }
-
-    case 'SELECT_LIST':
-      return state.lists.some((l) => l.id === action.id) ? { ...state, activeId: action.id } : state;
-
-    default:
-      return state;
-  }
-}
+const LISTS_KEY = ['lists'] as const;
 
 /* ---------- API da lista ativa (useList) ---------- */
 interface ListContextValue {
   items: ListItem[];
-  customPrices: CustomPrices;
   count: number;
   addItem: (product: Product, quantity?: number) => void;
   addManualItem: (input: ProductPriceInput) => void;
@@ -194,8 +47,7 @@ interface ListsContextValue {
   lists: ListSummary[];
   activeId: string;
   activeName: string;
-  /** Cria uma lista e a torna ativa; retorna o id criado. */
-  createList: (name: string) => string;
+  createList: (name: string) => void;
   renameList: (id: string, name: string) => void;
   deleteList: (id: string) => void;
   selectList: (id: string) => void;
@@ -205,56 +57,192 @@ const ListContext = createContext<ListContextValue | null>(null);
 const ListsContext = createContext<ListsContextValue | null>(null);
 
 export function ListProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(listsReducer, undefined, loadState);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
 
-  // Persiste mudanças (dados não sensíveis).
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // storage indisponível (modo privado/quota) — ignora silenciosamente.
-    }
-  }, [state]);
-
-  const active = useMemo(
-    () => state.lists.find((l) => l.id === state.activeId) ?? state.lists[0],
-    [state.lists, state.activeId],
+  /** Executa uma ação assíncrona, evitando rejeições não tratadas e avisando o
+   * usuário em caso de falha (as ações da UI são "fire-and-forget"). */
+  const run = useCallback(
+    (fn: () => Promise<void>) => {
+      fn().catch(() => toast('Não foi possível salvar a alteração.', 'error'));
+    },
+    [toast],
   );
 
-  const listValue = useMemo<ListContextValue>(() => {
-    const count = active.items.reduce((sum, i) => sum + i.quantity, 0);
-    return {
-      items: active.items,
-      customPrices: active.customPrices,
-      count,
-      addItem: (product, quantity) => dispatch({ type: 'ADD', product, quantity }),
-      addManualItem: (input) => dispatch({ type: 'ADD_MANUAL', input }),
-      setQuantity: (productId, quantity) => dispatch({ type: 'SET_QUANTITY', productId, quantity }),
-      removeItem: (productId) => dispatch({ type: 'REMOVE', productId }),
-      clear: () => dispatch({ type: 'CLEAR' }),
-    };
-  }, [active]);
+  const listsQuery = useQuery({
+    queryKey: LISTS_KEY,
+    queryFn: listsApi.getLists,
+    enabled: isAuthenticated,
+  });
 
-  const listsValue = useMemo<ListsContextValue>(() => {
+  const lists = useMemo<ShoppingList[]>(() => listsQuery.data ?? [], [listsQuery.data]);
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = activeId;
+
+  // Garante uma lista ativa válida assim que as listas carregam.
+  useEffect(() => {
+    if (lists.length === 0) return;
+    if (!activeId || !lists.some((l) => l.id === activeId)) {
+      setActiveId(lists[0].id);
+    }
+  }, [lists, activeId]);
+
+  const active = useMemo(
+    () => lists.find((l) => l.id === activeId) ?? lists[0] ?? null,
+    [lists, activeId],
+  );
+
+  const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: LISTS_KEY }), [qc]);
+
+  /** Lista ativa mais recente do cache (evita closures defasadas nas mutações). */
+  const resolveActive = useCallback((): ShoppingList | undefined => {
+    const current = qc.getQueryData<ShoppingList[]>(LISTS_KEY) ?? lists;
+    return current.find((l) => l.id === activeIdRef.current) ?? current[0];
+  }, [qc, lists]);
+
+  /** Garante uma lista ativa, criando uma padrão se ainda não houver nenhuma. */
+  const ensureActiveList = useCallback(async (): Promise<ShoppingList> => {
+    const existing = resolveActive();
+    if (existing) return existing;
+    const created = await listsApi.createList('Minha lista');
+    setActiveId(created.id);
+    await invalidate();
+    return created;
+  }, [resolveActive, invalidate]);
+
+  /* ----- Ações da lista ativa ----- */
+  const addItem = useCallback(
+    (product: Product, quantity = 1) => {
+      run(async () => {
+        const list = await ensureActiveList();
+        await listsApi.addItem(list.id, product.id, quantity);
+        await invalidate();
+      });
+    },
+    [run, ensureActiveList, invalidate],
+  );
+
+  const addManualItem = useCallback(
+    (input: ProductPriceInput) => {
+      run(async () => {
+        const list = await ensureActiveList();
+        // Cria o produto no catálogo (+ preço inicial) e adiciona à lista.
+        const product = await createProduct({
+          name: input.name,
+          category: input.category,
+          unit: 'unidade',
+          marketId: input.marketId,
+          price: input.price,
+        });
+        await listsApi.addItem(list.id, product.id, input.quantity);
+        await Promise.all([invalidate(), qc.invalidateQueries({ queryKey: ['products'] })]);
+      });
+    },
+    [run, ensureActiveList, invalidate, qc],
+  );
+
+  const setQuantity = useCallback(
+    (productId: string, quantity: number) => {
+      run(async () => {
+        const list = resolveActive();
+        if (!list) return;
+        if (quantity <= 0) await listsApi.removeItem(list.id, productId);
+        else await listsApi.updateItemQuantity(list.id, productId, quantity);
+        await invalidate();
+      });
+    },
+    [run, resolveActive, invalidate],
+  );
+
+  const removeItem = useCallback(
+    (productId: string) => {
+      run(async () => {
+        const list = resolveActive();
+        if (!list) return;
+        await listsApi.removeItem(list.id, productId);
+        await invalidate();
+      });
+    },
+    [run, resolveActive, invalidate],
+  );
+
+  const clear = useCallback(() => {
+    run(async () => {
+      const list = resolveActive();
+      if (!list) return;
+      await listsApi.clearList(list.id);
+      await invalidate();
+    });
+  }, [run, resolveActive, invalidate]);
+
+  /* ----- Ações da coleção ----- */
+  const createList = useCallback(
+    (name: string) => {
+      run(async () => {
+        const created = await listsApi.createList(name.trim() || 'Nova lista');
+        setActiveId(created.id);
+        await invalidate();
+      });
+    },
+    [run, invalidate],
+  );
+
+  const renameList = useCallback(
+    (id: string, name: string) => {
+      run(async () => {
+        await listsApi.renameList(id, name);
+        await invalidate();
+      });
+    },
+    [run, invalidate],
+  );
+
+  const deleteList = useCallback(
+    (id: string) => {
+      run(async () => {
+        await listsApi.deleteList(id);
+        if (activeIdRef.current === id) setActiveId(null);
+        await invalidate();
+      });
+    },
+    [run, invalidate],
+  );
+
+  const selectList = useCallback((id: string) => setActiveId(id), []);
+
+  const listValue = useMemo<ListContextValue>(() => {
+    const items = active?.items ?? [];
     return {
-      lists: state.lists.map((l) => ({
+      items,
+      count: items.reduce((sum, i) => sum + i.quantity, 0),
+      addItem,
+      addManualItem,
+      setQuantity,
+      removeItem,
+      clear,
+    };
+  }, [active, addItem, addManualItem, setQuantity, removeItem, clear]);
+
+  const listsValue = useMemo<ListsContextValue>(
+    () => ({
+      lists: lists.map((l) => ({
         id: l.id,
         name: l.name,
         itemCount: l.items.reduce((sum, i) => sum + i.quantity, 0),
         updatedAt: l.updatedAt,
       })),
-      activeId: state.activeId,
-      activeName: active.name,
-      createList: (name) => {
-        const id = `list-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        dispatch({ type: 'CREATE_LIST', name, id });
-        return id;
-      },
-      renameList: (id, name) => dispatch({ type: 'RENAME_LIST', id, name }),
-      deleteList: (id) => dispatch({ type: 'DELETE_LIST', id }),
-      selectList: (id) => dispatch({ type: 'SELECT_LIST', id }),
-    };
-  }, [state.lists, state.activeId, active.name]);
+      activeId: active?.id ?? '',
+      activeName: active?.name ?? '',
+      createList,
+      renameList,
+      deleteList,
+      selectList,
+    }),
+    [lists, active, createList, renameList, deleteList, selectList],
+  );
 
   return (
     <ListContext.Provider value={listValue}>

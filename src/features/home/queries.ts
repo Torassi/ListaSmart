@@ -1,13 +1,14 @@
 /**
  * Hooks de dados da Home via React Query.
- * Consomem a camada `services/` (mock hoje). As query keys já ficam organizadas
- * para quando a API real entrar.
+ *
+ * Produtos e categorias vêm da API (`getProducts`/`getCategories`); economia
+ * recente e favoritos ainda são mocks (`getRecentSavings`/`getFavorites`).
  */
 import { useQuery } from '@tanstack/react-query';
 import { getCategories, getFavorites, getProducts, getRecentSavings } from '@/services';
 
 export function useProducts() {
-  return useQuery({ queryKey: ['products'], queryFn: getProducts });
+  return useQuery({ queryKey: ['products'], queryFn: () => getProducts() });
 }
 
 export function useCategories() {

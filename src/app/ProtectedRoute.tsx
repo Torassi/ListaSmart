@@ -12,8 +12,17 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthContext';
 
 export function ProtectedRoute() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
   const location = useLocation();
+
+  // Aguarda a reidratação da sessão para não redirecionar quem já está logado.
+  if (isInitializing) {
+    return (
+      <div className="grid min-h-screen place-items-center" aria-busy="true">
+        <span className="sr-only">Carregando…</span>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;

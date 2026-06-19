@@ -2,9 +2,9 @@
  * Processamento de imagem no cliente — para a foto do produto no catálogo.
  *
  * Lê um arquivo de imagem, redimensiona (canvas) e re-codifica como JPEG data URL.
- * Isso mantém o tamanho pequeno (cabe no localStorage do mock) e, como passo de
- * segurança, a re-codificação via canvas descarta qualquer conteúdo que não seja
- * imagem de fato.
+ * Isso mantém o payload pequeno ao enviar a foto para a API (`POST /products`) e,
+ * como passo de segurança, a re-codificação via canvas descarta qualquer conteúdo
+ * que não seja imagem de fato.
  *
  * SECURITY: além disso, validamos tipo (image/*) e tamanho. O `safeUrl()` permite
  * apenas `data:image/*`, então o data URL resultante é seguro para usar em <img>.

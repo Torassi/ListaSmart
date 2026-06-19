@@ -5,7 +5,8 @@ Revises:
 Create Date: 2026-06-16
 
 Cria o schema base do MVP: usuários, produtos, mercados, preços, listas, itens
-e a associação de colaboradores.
+e a associação de colaboradores. Inclui timestamps, autoria (created_by),
+unicidade de e-mail/código de barras e checagens de valor/quantidade.
 """
 from typing import Sequence, Union
 
@@ -27,7 +28,8 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
         sa.Column("avatar_url", sa.String(length=2048), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_users_email", "users", ["email"], unique=True)
@@ -41,11 +43,16 @@ def upgrade() -> None:
         sa.Column("unit", sa.String(length=40), nullable=False),
         sa.Column("brand", sa.String(length=80), nullable=True),
         sa.Column("barcode", sa.String(length=14), nullable=True),
+        sa.Column("created_by", sa.String(length=32), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_products_name", "products", ["name"])
     op.create_index("ix_products_category", "products", ["category"])
-    op.create_index("ix_products_barcode", "products", ["barcode"])
+    op.create_index("ix_products_barcode", "products", ["barcode"], unique=True)
+    op.create_index("ix_products_created_by", "products", ["created_by"])
 
     op.create_table(
         "markets",
@@ -62,19 +69,24 @@ def upgrade() -> None:
         sa.Column("market_id", sa.String(length=64), nullable=False),
         sa.Column("value", sa.Float(), nullable=False),
         sa.Column("source", sa.String(length=16), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_by", sa.String(length=32), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint("value > 0", name="ck_price_value_positive"),
         sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["market_id"], ["markets.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("product_id", "market_id"),
     )
+    op.create_index("ix_prices_created_by", "prices", ["created_by"])
 
     op.create_table(
         "shopping_lists",
         sa.Column("id", sa.String(length=32), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=False),
         sa.Column("owner_id", sa.String(length=32), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["owner_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -86,6 +98,11 @@ def upgrade() -> None:
         sa.Column("list_id", sa.String(length=32), nullable=False),
         sa.Column("product_id", sa.String(length=64), nullable=False),
         sa.Column("quantity", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "quantity >= 1 AND quantity <= 999", name="ck_list_item_quantity"
+        ),
         sa.ForeignKeyConstraint(["list_id"], ["shopping_lists.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -109,8 +126,10 @@ def downgrade() -> None:
     op.drop_table("list_items")
     op.drop_index("ix_shopping_lists_owner_id", table_name="shopping_lists")
     op.drop_table("shopping_lists")
+    op.drop_index("ix_prices_created_by", table_name="prices")
     op.drop_table("prices")
     op.drop_table("markets")
+    op.drop_index("ix_products_created_by", table_name="products")
     op.drop_index("ix_products_barcode", table_name="products")
     op.drop_index("ix_products_category", table_name="products")
     op.drop_index("ix_products_name", table_name="products")

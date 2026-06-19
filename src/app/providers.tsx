@@ -1,9 +1,9 @@
 /**
  * Providers globais da aplicação.
  *
- * - React Query: cache de dados de servidor (hoje, dos mocks).
+ * - React Query: cache de dados de servidor (API real; alguns widgets em mock).
  * - ToastProvider: notificações.
- * - ListProvider: estado global da lista de compras.
+ * - ListProvider: estado global da lista de compras (persistida via API).
  */
 import { useState } from 'react';
 import type { ReactNode } from 'react';

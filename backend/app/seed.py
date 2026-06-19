@@ -4,10 +4,14 @@ Reproduz `src/services/mockData.ts`: mercados, catálogo de produtos (com códig
 de barras determinístico) e a matriz de preços. Também cria uma conta de
 demonstração para facilitar os testes (demo@listasmart.com / 12345678).
 
-Uso:
-    python -m app.seed          # cria as tabelas (se preciso) e popula
+Uso (rode a migration ANTES — o seed não cria o schema):
+    alembic upgrade head        # cria/evolui o schema (única fonte)
+    python -m app.seed          # apenas insere os dados iniciais
 
 É idempotente: se já houver produtos, não duplica nada.
+
+IMPORTANTE: o seed NÃO cria o schema. O Alembic é a única fonte de criação e
+evolução do banco — rode `alembic upgrade head` antes de semear.
 """
 from __future__ import annotations
 
@@ -15,7 +19,9 @@ import math
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from app.database import Base, SessionLocal, engine
+from sqlalchemy import inspect
+
+from app.database import SessionLocal, engine
 from app.models import Market, Price, Product, User
 from app.security import hash_password
 
@@ -95,7 +101,12 @@ def _round2(value: float) -> float:
 
 
 def seed() -> None:
-    Base.metadata.create_all(bind=engine)
+    # O schema é responsabilidade do Alembic. Se as tabelas não existem, oriente
+    # a rodar a migration antes de semear (não criamos o schema aqui).
+    if not inspect(engine).has_table("products"):
+        raise SystemExit(
+            "Schema ausente: rode `alembic upgrade head` antes de `python -m app.seed`."
+        )
 
     db = SessionLocal()
     try:

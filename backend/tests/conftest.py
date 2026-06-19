@@ -1,7 +1,13 @@
 """Fixtures de teste: banco SQLite em memória isolado + catálogo mínimo."""
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
+from typing import Any
+
+# SECRET_KEY é obrigatória (ver app.config). Define um valor de teste forte
+# ANTES de importar a aplicação, que carrega as settings no import.
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production-0123456789")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,9 +15,29 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models import Market, Price, Product
+
+
+class CSRFTestClient(TestClient):
+    """TestClient que reenvia o cookie CSRF no header, como faz o front real.
+
+    Para métodos que alteram estado, injeta `X-CSRF-Token` a partir do cookie
+    CSRF definido pelo servidor — assim os testes refletem o fluxo do navegador.
+    """
+
+    _SAFE = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+
+    def request(self, method: str, url: Any, **kwargs: Any):  # type: ignore[override]
+        if method.upper() not in self._SAFE:
+            token = self.cookies.get(settings.csrf_cookie_name)
+            if token:
+                headers = dict(kwargs.get("headers") or {})
+                headers.setdefault("X-CSRF-Token", token)
+                kwargs["headers"] = headers
+        return super().request(method, url, **kwargs)
 
 # Banco em memória compartilhado entre as conexões do teste.
 engine = create_engine(
@@ -78,8 +104,8 @@ def _db() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
+def client() -> CSRFTestClient:
+    return CSRFTestClient(app)
 
 
 @pytest.fixture

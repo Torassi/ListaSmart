@@ -1,17 +1,12 @@
 /**
- * Service da lista — matriz de preços por produto/mercado.
- * Substituível por chamadas reais (ver `http.ts`).
+ * Service de preços da lista — matriz de preços por produto/mercado.
+ *
+ * INTEGRADO: delega para a API real (`services/api/prices.ts`). O tipo
+ * `PriceMatrix` continua declarado aqui para manter o contrato estável.
  */
-import { prices } from './mockData';
-import { delay } from './http';
 
-/** productId -> (marketId -> valor). Construída a partir dos preços mockados. */
+/** productId -> (marketId -> valor). */
 export type PriceMatrix = Record<string, Record<string, number>>;
 
-export async function getPriceMatrix(): Promise<PriceMatrix> {
-  const matrix: PriceMatrix = {};
-  for (const p of prices) {
-    (matrix[p.productId] ??= {})[p.marketId] = p.value;
-  }
-  return delay(matrix);
-}
+export { getPriceMatrix, registerPrice } from './api/prices';
+export type { RegisterPriceInput } from './api/prices';

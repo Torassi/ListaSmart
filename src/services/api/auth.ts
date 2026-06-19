@@ -1,9 +1,7 @@
 /**
- * Service de autenticação — implementação REAL (back-end FastAPI).
- *
- * Mesmas assinaturas do mock em `src/services/auth.ts`, para troca direta.
- * A sessão é mantida em cookie httpOnly definido pelo servidor (ver
- * `services/http.ts`); o token nunca chega ao JavaScript.
+ * Service de autenticação — implementação REAL (back-end FastAPI), em uso pelo
+ * `AuthContext`. A sessão é mantida em cookie httpOnly definido pelo servidor
+ * (ver `services/http.ts`); o token nunca chega ao JavaScript.
  */
 import type { LoginInput, SignupInput } from '@/lib/validation';
 import type { User } from '@/types';

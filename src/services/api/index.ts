@@ -1,17 +1,12 @@
 /**
- * Camada de services REAL (back-end FastAPI em `backend/`).
+ * Camada de services REAL (back-end FastAPI em `backend/`) — caminho ATIVO.
  *
- * ISOLADA de propósito: o app continua usando os mocks de `@/services` por
- * padrão. Esta pasta contém as implementações prontas para a integração da
- * PRÓXIMA ETAPA — auth, catálogo, listas, preços e comparação.
+ * Auth, catálogo, listas, preços e comparação da aplicação usam estes services
+ * (diretamente ou via `@/services`, que delega catálogo/preços para cá). A base
+ * da API vem de `VITE_API_BASE_URL` (ex.: `http://localhost:8000/api`) e as
+ * requisições enviam o cookie httpOnly de sessão (`credentials: 'include'`).
  *
- * Como ativar (resumo — ver README):
- * 1. Suba o back-end (pasta `backend/`).
- * 2. Defina `VITE_API_BASE_URL=http://localhost:8000/api` no `.env`.
- * 3. Troque os imports dos consumidores de `@/services/*` por `@/services/api/*`
- *    (auth, catálogo, listas, preços, comparação). Home/dashboard seguem no mock.
- *
- * NÃO inclui: analytics, economia recente, favoritos — seguem mockados.
+ * NÃO inclui (seguem em mock): analytics, economia recente e favoritos.
  */
 export * as authApi from './auth';
 export * as catalogApi from './catalog';

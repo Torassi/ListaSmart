@@ -20,8 +20,11 @@ const highlights = [
 ];
 
 export function AuthPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
   const [mode, setMode] = useState<Mode>('login');
+
+  // Aguarda a reidratação da sessão antes de decidir.
+  if (isInitializing) return <div className="min-h-screen" aria-busy="true" />;
 
   // Já autenticado não deve ver a tela de login.
   if (isAuthenticated) return <Navigate to="/" replace />;

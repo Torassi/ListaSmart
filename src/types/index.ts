@@ -1,9 +1,9 @@
 /**
- * Tipagens compartilhadas — rascunho do futuro contrato de dados da API.
+ * Tipagens compartilhadas — contrato de dados da API.
  *
- * Estes tipos descrevem o formato que o back-end deverá retornar. Hoje são
- * consumidos pela camada `services/` (mockada). Quando a API real existir,
- * basta trocar a implementação dos services mantendo estes contratos.
+ * Estes tipos descrevem o formato retornado pelo back-end (FastAPI) e são o
+ * contrato usado pela camada `services/`. Espelham os schemas Pydantic em
+ * `backend/app/schemas`.
  */
 
 export type Id = string;
@@ -108,6 +108,9 @@ export interface ComparisonRow {
 export interface MarketTotal {
   marketId: Id;
   total: number;
+  /** True se o mercado tem preço para TODOS os itens da lista (cobertura completa).
+   * Apenas mercados completos disputam mais barato/mais caro e a economia. */
+  complete: boolean;
 }
 
 export interface ListComparison {

@@ -68,8 +68,16 @@ export function AddCatalogProductSlideOver({ open, onClose, markets }: AddCatalo
   }
 
   function onSubmit(values: CatalogProductInput) {
-    addProduct(values, imageUrl ?? undefined);
-    toast(`${values.name} adicionado ao catálogo`, 'success');
+    // Persiste no back-end (POST /products). Otimista: fecha e confirma já;
+    // erros (ex.: código de barras duplicado) são sinalizados via toast.
+    addProduct(values, imageUrl ?? undefined)
+      .then(() => toast(`${values.name} adicionado ao catálogo`, 'success'))
+      .catch((err) =>
+        toast(
+          err instanceof Error ? err.message : 'Não foi possível adicionar ao catálogo.',
+          'error',
+        ),
+      );
     close();
   }
 

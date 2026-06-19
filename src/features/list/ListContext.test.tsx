@@ -1,47 +1,79 @@
 import { describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
-import { act, renderHook } from '@testing-library/react';
-import { ListProvider, useList } from './ListContext';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ToastProvider } from '@/hooks/useToast';
+import { AuthProvider } from '@/features/auth/AuthContext';
+import { ListProvider, useList, useLists } from './ListContext';
+import { seedSession } from '@/test/fakeBackend';
 import type { Product } from '@/types';
 
+// O fake backend (ver src/test/setup.ts) já tem o produto "p1".
 const product: Product = {
   id: 'p1',
-  name: 'Arroz',
-  category: 'Mercearia',
-  unit: '5 kg',
-  imageUrl: 'data:image/svg+xml;utf8,<svg/>',
+  name: 'Banana Prata',
+  category: 'Hortifrúti',
+  unit: '1 kg',
+  imageUrl: 'data:,',
 };
 
-function wrapper({ children }: { children: ReactNode }) {
-  return <ListProvider>{children}</ListProvider>;
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <ToastProvider>
+            <ListProvider>{children}</ListProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+  };
 }
 
-describe('ListContext', () => {
-  it('adiciona item e acumula quantidade do mesmo produto', () => {
-    const { result } = renderHook(() => useList(), { wrapper });
+function setup() {
+  return renderHook(() => ({ list: useList(), lists: useLists() }), { wrapper: makeWrapper() });
+}
 
-    act(() => result.current.addItem(product));
-    act(() => result.current.addItem(product, 2));
+describe('ListContext (integrado à API)', () => {
+  it('adiciona item e acumula quantidade do mesmo produto', async () => {
+    seedSession();
+    const { result } = setup();
 
-    expect(result.current.items).toHaveLength(1);
-    expect(result.current.count).toBe(3);
+    act(() => result.current.lists.createList('Compra'));
+    await waitFor(() => expect(result.current.lists.activeId).toBeTruthy());
+
+    act(() => result.current.list.addItem(product));
+    await waitFor(() => expect(result.current.list.items).toHaveLength(1));
+
+    act(() => result.current.list.addItem(product, 2));
+    await waitFor(() => expect(result.current.list.count).toBe(3));
   });
 
-  it('remove o item ao definir quantidade <= 0', () => {
-    const { result } = renderHook(() => useList(), { wrapper });
+  it('remove o item ao definir quantidade <= 0', async () => {
+    seedSession();
+    const { result } = setup();
 
-    act(() => result.current.addItem(product));
-    act(() => result.current.setQuantity(product.id, 0));
+    act(() => result.current.lists.createList('Compra'));
+    await waitFor(() => expect(result.current.lists.activeId).toBeTruthy());
 
-    expect(result.current.items).toHaveLength(0);
-    expect(result.current.count).toBe(0);
+    act(() => result.current.list.addItem(product));
+    await waitFor(() => expect(result.current.list.items).toHaveLength(1));
+
+    act(() => result.current.list.setQuantity(product.id, 0));
+    await waitFor(() => expect(result.current.list.items).toHaveLength(0));
   });
 
-  it('registra preço manual ao adicionar item via addManualItem', () => {
-    const { result } = renderHook(() => useList(), { wrapper });
+  it('cadastra produto manual e o adiciona à lista (addManualItem)', async () => {
+    seedSession();
+    const { result } = setup();
+
+    act(() => result.current.lists.createList('Compra'));
+    await waitFor(() => expect(result.current.lists.activeId).toBeTruthy());
 
     act(() =>
-      result.current.addManualItem({
+      result.current.list.addManualItem({
         name: 'Feijão',
         category: 'Mercearia',
         quantity: 2,
@@ -50,8 +82,8 @@ describe('ListContext', () => {
       }),
     );
 
-    expect(result.current.items).toHaveLength(1);
-    const id = result.current.items[0].product.id;
-    expect(result.current.customPrices[id].giassi).toBe(9.9);
+    await waitFor(() => expect(result.current.list.items).toHaveLength(1));
+    expect(result.current.list.items[0].product.name).toBe('Feijão');
+    expect(result.current.list.items[0].quantity).toBe(2);
   });
 });

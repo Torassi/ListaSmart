@@ -24,10 +24,15 @@ class ComparisonRow(CamelModel):
 
 
 class MarketTotal(CamelModel):
-    """Espelha `MarketTotal`."""
+    """Espelha `MarketTotal`.
+
+    `complete` indica se o mercado tem preço para TODOS os itens da lista.
+    Apenas mercados completos disputam mais barato/mais caro e a economia.
+    """
 
     market_id: str
     total: float
+    complete: bool
 
 
 class ListComparison(CamelModel):
