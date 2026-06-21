@@ -15,7 +15,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ListItem, Product, ShoppingList } from '@/types';
+import type { ListItem, Product, ShoppingList, User } from '@/types';
 import type { ProductPriceInput } from '@/lib/validation';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -47,6 +47,8 @@ interface ListsContextValue {
   lists: ListSummary[];
   activeId: string;
   activeName: string;
+  /** Colaboradores da lista ativa (o dono é sempre o primeiro). */
+  activeCollaborators: User[];
   createList: (name: string) => void;
   renameList: (id: string, name: string) => void;
   deleteList: (id: string) => void;
@@ -236,6 +238,7 @@ export function ListProvider({ children }: { children: ReactNode }) {
       })),
       activeId: active?.id ?? '',
       activeName: active?.name ?? '',
+      activeCollaborators: active?.collaborators ?? [],
       createList,
       renameList,
       deleteList,

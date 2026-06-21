@@ -2,7 +2,8 @@
  * Hooks de dados da Home via React Query.
  *
  * Produtos e categorias vêm da API (`getProducts`/`getCategories`); economia
- * recente e favoritos ainda são mocks (`getRecentSavings`/`getFavorites`).
+ * recente e favoritos ainda não têm endpoint e retornam vazio
+ * (`getRecentSavings`/`getFavorites`).
  */
 import { useQuery } from '@tanstack/react-query';
 import { getCategories, getFavorites, getProducts, getRecentSavings } from '@/services';

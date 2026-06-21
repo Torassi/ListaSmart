@@ -63,7 +63,7 @@ export function HomePage() {
     });
   }, [products, category, debouncedQuery]);
 
-  // KPIs derivados das economias mockadas.
+  // KPIs derivados das economias recentes (vazias até existir endpoint no back-end).
   const kpis = useMemo(() => {
     const totalSaved = savings.reduce((sum, s) => sum + s.savedAmount, 0);
     const byMarket = savings.reduce<Record<string, number>>((acc, s) => {

@@ -120,6 +120,8 @@ export function AnalyticsPage() {
           <CardBody>
             {isLoading || !data ? (
               <ChartSkeleton />
+            ) : data.categoryShares.length === 0 ? (
+              <ChartEmpty />
             ) : (
               <CategoryDonut data={data.categoryShares} />
             )}
@@ -133,6 +135,8 @@ export function AnalyticsPage() {
           <CardBody>
             {isLoading || !data ? (
               <ChartSkeleton />
+            ) : data.marketCompetitiveness.length === 0 ? (
+              <ChartEmpty />
             ) : (
               <MarketBarChart data={data.marketCompetitiveness} />
             )}
@@ -178,4 +182,12 @@ export function AnalyticsPage() {
 
 function ChartSkeleton() {
   return <div className="h-[280px] animate-pulse rounded-md bg-bg" aria-hidden="true" />;
+}
+
+function ChartEmpty() {
+  return (
+    <div className="grid h-[280px] place-items-center text-sm text-text-subtle">
+      Sem dados para exibir ainda.
+    </div>
+  );
 }

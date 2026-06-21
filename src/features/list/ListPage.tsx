@@ -12,7 +12,6 @@ import { Badge, Button, Card, CardBody, ProductImage, SearchInput } from '@/comp
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/currency';
 import { resolveRowPrices } from '@/lib/pricing';
-import { collaborators } from '@/services/mockData';
 import { useList, useLists } from './ListContext';
 import { useMarkets, usePriceMatrix } from './queries';
 import { QuantityStepper } from './QuantityStepper';
@@ -28,7 +27,7 @@ function normalize(text: string): string {
 
 export function ListPage() {
   const { items, setQuantity, removeItem } = useList();
-  const { activeName } = useLists();
+  const { activeName, activeCollaborators } = useLists();
   const marketsQuery = useMarkets();
   const matrixQuery = usePriceMatrix();
   const [query, setQuery] = useState('');
@@ -76,7 +75,7 @@ export function ListPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <CollaboratorsAvatars users={collaborators} />
+          <CollaboratorsAvatars users={activeCollaborators} />
           <Button
             variant="secondary"
             onClick={() => setSlideOpen(true)}
