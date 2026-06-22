@@ -19,17 +19,17 @@ import type { ListItem, Product, ShoppingList, User } from '@/types';
 import type { ProductPriceInput } from '@/lib/validation';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/features/auth/AuthContext';
+import { queryKeys } from '@/lib/queryKeys';
 import * as listsApi from '@/services/api/lists';
 import { createProduct } from '@/services/api/catalog';
-
-const LISTS_KEY = ['lists'] as const;
 
 /* ---------- API da lista ativa (useList) ---------- */
 interface ListContextValue {
   items: ListItem[];
   count: number;
   addItem: (product: Product, quantity?: number) => void;
-  addManualItem: (input: ProductPriceInput) => void;
+  /** Cadastra produto + preço e adiciona à lista. Awaitable: o form trata erros. */
+  addManualItem: (input: ProductPriceInput) => Promise<void>;
   setQuantity: (productId: string, quantity: number) => void;
   removeItem: (productId: string) => void;
   clear: () => void;
@@ -61,7 +61,12 @@ const ListsContext = createContext<ListsContextValue | null>(null);
 export function ListProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+
+  // Chave de cache vinculada ao usuário — isola listas entre contas.
+  const listsKey = useMemo(() => queryKeys.lists(user?.id), [user?.id]);
+  const listsKeyRef = useRef(listsKey);
+  listsKeyRef.current = listsKey;
 
   /** Executa uma ação assíncrona, evitando rejeições não tratadas e avisando o
    * usuário em caso de falha (as ações da UI são "fire-and-forget"). */
@@ -73,7 +78,7 @@ export function ListProvider({ children }: { children: ReactNode }) {
   );
 
   const listsQuery = useQuery({
-    queryKey: LISTS_KEY,
+    queryKey: listsKey,
     queryFn: listsApi.getLists,
     enabled: isAuthenticated,
   });
@@ -97,11 +102,25 @@ export function ListProvider({ children }: { children: ReactNode }) {
     [lists, activeId],
   );
 
-  const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: LISTS_KEY }), [qc]);
+  const invalidate = useCallback(
+    () => qc.invalidateQueries({ queryKey: listsKeyRef.current }),
+    [qc],
+  );
+
+  /** Invalida a lista + a comparação daquela lista (recalcula após mudanças). */
+  const invalidateListAndComparison = useCallback(
+    async (listId: string) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: listsKeyRef.current }),
+        qc.invalidateQueries({ queryKey: queryKeys.comparison(listId) }),
+      ]);
+    },
+    [qc],
+  );
 
   /** Lista ativa mais recente do cache (evita closures defasadas nas mutações). */
   const resolveActive = useCallback((): ShoppingList | undefined => {
-    const current = qc.getQueryData<ShoppingList[]>(LISTS_KEY) ?? lists;
+    const current = qc.getQueryData<ShoppingList[]>(listsKeyRef.current) ?? lists;
     return current.find((l) => l.id === activeIdRef.current) ?? current[0];
   }, [qc, lists]);
 
@@ -121,29 +140,36 @@ export function ListProvider({ children }: { children: ReactNode }) {
       run(async () => {
         const list = await ensureActiveList();
         await listsApi.addItem(list.id, product.id, quantity);
-        await invalidate();
+        await invalidateListAndComparison(list.id);
       });
     },
-    [run, ensureActiveList, invalidate],
+    [run, ensureActiveList, invalidateListAndComparison],
   );
 
+  // Awaitable (sem `run`): o formulário aguarda e trata sucesso/erro.
   const addManualItem = useCallback(
-    (input: ProductPriceInput) => {
-      run(async () => {
-        const list = await ensureActiveList();
-        // Cria o produto no catálogo (+ preço inicial) e adiciona à lista.
-        const product = await createProduct({
-          name: input.name,
-          category: input.category,
-          unit: 'unidade',
-          marketId: input.marketId,
-          price: input.price,
-        });
-        await listsApi.addItem(list.id, product.id, input.quantity);
-        await Promise.all([invalidate(), qc.invalidateQueries({ queryKey: ['products'] })]);
+    async (input: ProductPriceInput): Promise<void> => {
+      const list = await ensureActiveList();
+      // Cria o produto no catálogo (+ preço inicial) e adiciona à lista.
+      const product = await createProduct({
+        name: input.name,
+        category: input.category,
+        unit: 'unidade',
+        marketId: input.marketId,
+        price: input.price,
       });
+      await listsApi.addItem(list.id, product.id, input.quantity);
+      // Mudança de preço/catálogo: invalida produtos, matriz, comparação,
+      // analytics e economia recente, além da lista.
+      await Promise.all([
+        invalidateListAndComparison(list.id),
+        qc.invalidateQueries({ queryKey: queryKeys.products }),
+        qc.invalidateQueries({ queryKey: queryKeys.priceMatrix }),
+        qc.invalidateQueries({ queryKey: queryKeys.analytics }),
+        qc.invalidateQueries({ queryKey: queryKeys.savingsRecent }),
+      ]);
     },
-    [run, ensureActiveList, invalidate, qc],
+    [ensureActiveList, invalidateListAndComparison, qc],
   );
 
   const setQuantity = useCallback(
@@ -153,10 +179,10 @@ export function ListProvider({ children }: { children: ReactNode }) {
         if (!list) return;
         if (quantity <= 0) await listsApi.removeItem(list.id, productId);
         else await listsApi.updateItemQuantity(list.id, productId, quantity);
-        await invalidate();
+        await invalidateListAndComparison(list.id);
       });
     },
-    [run, resolveActive, invalidate],
+    [run, resolveActive, invalidateListAndComparison],
   );
 
   const removeItem = useCallback(
@@ -165,10 +191,10 @@ export function ListProvider({ children }: { children: ReactNode }) {
         const list = resolveActive();
         if (!list) return;
         await listsApi.removeItem(list.id, productId);
-        await invalidate();
+        await invalidateListAndComparison(list.id);
       });
     },
-    [run, resolveActive, invalidate],
+    [run, resolveActive, invalidateListAndComparison],
   );
 
   const clear = useCallback(() => {
@@ -176,9 +202,9 @@ export function ListProvider({ children }: { children: ReactNode }) {
       const list = resolveActive();
       if (!list) return;
       await listsApi.clearList(list.id);
-      await invalidate();
+      await invalidateListAndComparison(list.id);
     });
-  }, [run, resolveActive, invalidate]);
+  }, [run, resolveActive, invalidateListAndComparison]);
 
   /* ----- Ações da coleção ----- */
   const createList = useCallback(

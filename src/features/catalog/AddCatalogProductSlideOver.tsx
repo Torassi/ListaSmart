@@ -67,18 +67,20 @@ export function AddCatalogProductSlideOver({ open, onClose, markets }: AddCatalo
     }
   }
 
-  function onSubmit(values: CatalogProductInput) {
-    // Persiste no back-end (POST /products). Otimista: fecha e confirma já;
-    // erros (ex.: código de barras duplicado) são sinalizados via toast.
-    addProduct(values, imageUrl ?? undefined)
-      .then(() => toast(`${values.name} adicionado ao catálogo`, 'success'))
-      .catch((err) =>
-        toast(
-          err instanceof Error ? err.message : 'Não foi possível adicionar ao catálogo.',
-          'error',
-        ),
+  async function onSubmit(values: CatalogProductInput) {
+    // Aguarda a API (POST /products). Só fecha/limpa no sucesso; em erro
+    // (ex.: código de barras duplicado) mantém o form aberto com os dados.
+    // `isSubmitting` bloqueia envio duplicado durante o await.
+    try {
+      await addProduct(values, imageUrl ?? undefined);
+      toast(`${values.name} adicionado ao catálogo`, 'success');
+      close();
+    } catch (err) {
+      toast(
+        err instanceof Error ? err.message : 'Não foi possível adicionar ao catálogo.',
+        'error',
       );
-    close();
+    }
   }
 
   return (
@@ -92,7 +94,12 @@ export function AddCatalogProductSlideOver({ open, onClose, markets }: AddCatalo
           <Button variant="ghost" onClick={close}>
             Cancelar
           </Button>
-          <Button type="submit" form="add-catalog-form" isLoading={isSubmitting} disabled={processingImage}>
+          <Button
+            type="submit"
+            form="add-catalog-form"
+            isLoading={isSubmitting}
+            disabled={processingImage || isSubmitting}
+          >
             Adicionar ao catálogo
           </Button>
         </div>

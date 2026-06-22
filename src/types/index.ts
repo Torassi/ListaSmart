@@ -82,6 +82,19 @@ export interface SavingsSummary {
   date: string; // ISO 8601
 }
 
+/** Snapshot de uma comparação registrada (histórico de economia). */
+export interface ComparisonSnapshot {
+  id: number;
+  shoppingListId: Id | null;
+  listName: string;
+  cheapestMarketId: Id | null;
+  mostExpensiveMarketId: Id | null;
+  cheapestTotal: number;
+  mostExpensiveTotal: number;
+  savedAmount: number;
+  createdAt: string; // ISO 8601
+}
+
 /** Favoritos do usuário (produtos e supermercados). */
 export interface Favorites {
   products: Product[];

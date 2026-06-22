@@ -70,17 +70,20 @@ describe('ListContext (integrado à API)', () => {
     const { result } = setup();
 
     act(() => result.current.lists.createList('Compra'));
-    await waitFor(() => expect(result.current.lists.activeId).toBeTruthy());
+    // Aguarda a lista realmente carregar (sessão reidratada + fetch concluído),
+    // evitando corrida com a criação otimista.
+    await waitFor(() => expect(result.current.lists.lists).toHaveLength(1));
 
-    act(() =>
-      result.current.list.addManualItem({
+    // addManualItem é awaitable: aguarda a Promise (cria produto + adiciona).
+    await act(async () => {
+      await result.current.list.addManualItem({
         name: 'Feijão',
         category: 'Mercearia',
         quantity: 2,
         marketId: 'giassi',
         price: 9.9,
-      }),
-    );
+      });
+    });
 
     await waitFor(() => expect(result.current.list.items).toHaveLength(1));
     expect(result.current.list.items[0].product.name).toBe('Feijão');

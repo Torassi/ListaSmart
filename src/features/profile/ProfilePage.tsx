@@ -38,10 +38,19 @@ export function ProfilePage() {
     defaultValues: { name: user?.name ?? '', region },
   });
 
-  function onSubmit(values: ProfileInput) {
-    updateUser({ name: values.name });
-    setRegion(values.region);
-    toast('Perfil atualizado', 'success');
+  async function onSubmit(values: ProfileInput) {
+    try {
+      // Aguarda a confirmação da API antes de mostrar sucesso.
+      await updateUser({ name: values.name });
+      setRegion(values.region);
+      toast('Perfil atualizado', 'success');
+    } catch (err) {
+      // Falha: mantém o formulário aberto e avisa o usuário.
+      toast(
+        err instanceof Error ? err.message : 'Não foi possível atualizar o perfil.',
+        'error',
+      );
+    }
   }
 
   return (

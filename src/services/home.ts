@@ -1,18 +1,15 @@
 /**
- * Service da Home — resumos de economia e favoritos.
+ * Service da Home — economias recentes e favoritos.
  *
- * Estas seções ainda não têm endpoint no back-end. Em vez de dados fictícios,
- * retornam estado vazio (a UI exibe "sem dados ainda"). Quando houver API,
- * basta trocar o corpo destas funções por chamadas reais (ver `http.ts`).
+ * `getRecentSavings` é INTEGRADO (`GET /savings/recent`, baseado nos snapshots
+ * de comparação do usuário). `getFavorites` ainda NÃO tem backend nesta etapa e
+ * retorna vazio (documentado): favoritos seguem fora do servidor por enquanto.
  */
-import type { Favorites, SavingsSummary } from '@/types';
+import type { Favorites } from '@/types';
 
-/** Economias recentes do usuário (cards de resumo da Home). */
-export async function getRecentSavings(): Promise<SavingsSummary[]> {
-  return [];
-}
+export { getRecentSavings } from './api/savings';
 
-/** Produtos e supermercados favoritos do usuário. */
+/** Favoritos — fora do backend nesta etapa (retorna vazio, sem dados fictícios). */
 export async function getFavorites(): Promise<Favorites> {
   return { products: [], markets: [] };
 }

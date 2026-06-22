@@ -4,7 +4,7 @@
  * Seções: saudação + atalhos, KPIs de economia, catálogo (busca + filtro + grid),
  * e a faixa inferior com Favoritos e Economias recentes.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ListPlus, History, PackagePlus, PiggyBank, Trophy, ShoppingBasket } from 'lucide-react';
 import { Button, Card, CardBody, CardHeader, CardTitle, ErrorState, KpiCard } from '@/components';
@@ -13,6 +13,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useLists } from '@/features/list/ListContext';
 import { useCatalog } from '@/features/catalog/useCatalog';
+import { registerSearchEvent } from '@/services';
 import { AddCatalogProductSlideOver } from '@/features/catalog/AddCatalogProductSlideOver';
 import { useMarkets } from '@/features/list/queries';
 import type { ProductCategory } from '@/types';
@@ -73,6 +74,25 @@ export function HomePage() {
     const topMarket = Object.entries(byMarket).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
     return { totalSaved, topMarket, listCount: savings.length };
   }, [savings]);
+
+  // Telemetria de busca (debounced): registra termos/categorias para o ranking.
+  // - apenas buscas NÃO vazias; - evita repetir o mesmo evento continuamente.
+  const lastQueryRef = useRef('');
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (q && q !== lastQueryRef.current) {
+      lastQueryRef.current = q;
+      void registerSearchEvent({ query: q }).catch(() => undefined);
+    }
+  }, [debouncedQuery]);
+
+  const lastCategoryRef = useRef<string>('all');
+  useEffect(() => {
+    if (category !== 'all' && category !== lastCategoryRef.current) {
+      lastCategoryRef.current = category;
+      void registerSearchEvent({ category }).catch(() => undefined);
+    }
+  }, [category]);
 
   return (
     <div className="flex flex-col gap-8">

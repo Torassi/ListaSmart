@@ -11,7 +11,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.csrf import CSRFMiddleware
 from app.errors import register_error_handlers
-from app.routers import auth, catalog, comparison, lists, prices, products
+from app.routers import (
+    analytics,
+    auth,
+    catalog,
+    comparison,
+    lists,
+    prices,
+    products,
+    savings,
+)
 
 app = FastAPI(
     title="Lista Smart API",
@@ -39,6 +48,8 @@ app.include_router(products.router, prefix=API_PREFIX)
 app.include_router(lists.router, prefix=API_PREFIX)
 app.include_router(prices.router, prefix=API_PREFIX)
 app.include_router(comparison.router, prefix=API_PREFIX)
+app.include_router(analytics.router, prefix=API_PREFIX)
+app.include_router(savings.router, prefix=API_PREFIX)
 
 
 @app.get("/api/health", tags=["health"])

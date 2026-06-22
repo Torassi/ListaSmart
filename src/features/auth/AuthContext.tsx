@@ -9,8 +9,10 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { LoginInput, SignupInput } from '@/lib/validation';
 import type { User } from '@/types';
+import { PRIVATE_QUERY_PREFIXES } from '@/lib/queryKeys';
 import * as authApi from '@/services/api/auth';
 
 interface AuthContextValue {
@@ -21,26 +23,36 @@ interface AuthContextValue {
   login: (input: LoginInput) => Promise<void>;
   signup: (input: SignupInput) => Promise<void>;
   logout: () => Promise<void>;
-  /** Atualiza o perfil (persiste via PATCH /auth/me) e reflete em memória. */
-  updateUser: (patch: Partial<Pick<User, 'name' | 'avatarUrl'>>) => void;
+  /** Atualiza o perfil (PATCH /auth/me) e só reflete em memória após confirmar. */
+  updateUser: (patch: Partial<Pick<User, 'name' | 'avatarUrl'>>) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const qc = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Reidrata a sessão a partir do cookie httpOnly ao montar.
+  /** Remove do cache todas as queries de dados PRIVADOS (evita vazar entre contas). */
+  const clearPrivateCache = useCallback(() => {
+    for (const prefix of PRIVATE_QUERY_PREFIXES) {
+      qc.removeQueries({ queryKey: prefix });
+    }
+  }, [qc]);
+
+  // Reidrata a sessão a partir do cookie httpOnly ao montar. Não sobrescreve um
+  // usuário já definido por um login/cadastro concorrente (evita corrida).
   useEffect(() => {
     let active = true;
     authApi
       .getCurrentUser()
       .then((u) => {
-        if (active) setUser(u);
+        if (active) setUser((prev) => prev ?? u);
       })
       .catch(() => {
-        if (active) setUser(null); // sem sessão válida
+        // Sem sessão válida: mantém o estado atual (inicialmente null). Não força
+        // null para não deslogar um usuário que acabou de entrar durante o init.
       })
       .finally(() => {
         if (active) setIsInitializing(false);
@@ -50,24 +62,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (input: LoginInput) => {
-    setUser(await authApi.login(input));
-  }, []);
+  const login = useCallback(
+    async (input: LoginInput) => {
+      // Limpa cache privado antes de assumir a nova sessão (evita vazamento).
+      clearPrivateCache();
+      setUser(await authApi.login(input));
+    },
+    [clearPrivateCache],
+  );
 
-  const signup = useCallback(async (input: SignupInput) => {
-    setUser(await authApi.signup(input));
-  }, []);
+  const signup = useCallback(
+    async (input: SignupInput) => {
+      clearPrivateCache();
+      setUser(await authApi.signup(input));
+    },
+    [clearPrivateCache],
+  );
 
   const logout = useCallback(async () => {
     await authApi.logout();
     setUser(null);
-  }, []);
+    // Remove dados privados do cache para não vazar à próxima conta.
+    clearPrivateCache();
+  }, [clearPrivateCache]);
 
-  const updateUser = useCallback((patch: Partial<Pick<User, 'name' | 'avatarUrl'>>) => {
-    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
-    // Persiste no servidor; falhas não derrubam a UI (otimista).
-    void authApi.updateProfile(patch).catch(() => undefined);
-  }, []);
+  /**
+   * Atualiza o perfil via PATCH /auth/me. Só reflete em memória APÓS a resposta
+   * confirmada — em caso de erro, propaga para o chamador (a UI mantém o form).
+   */
+  const updateUser = useCallback(
+    async (patch: Partial<Pick<User, 'name' | 'avatarUrl'>>): Promise<User> => {
+      const updated = await authApi.updateProfile(patch);
+      setUser(updated);
+      return updated;
+    },
+    [],
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({

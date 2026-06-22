@@ -12,6 +12,8 @@ import { Badge, Button, Card, CardBody, ProductImage, SearchInput } from '@/comp
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/currency';
 import { resolveRowPrices } from '@/lib/pricing';
+import { buildComparison } from '@/lib/comparison';
+import type { MarketTotal } from '@/types';
 import { useList, useLists } from './ListContext';
 import { useMarkets, usePriceMatrix } from './queries';
 import { QuantityStepper } from './QuantityStepper';
@@ -49,20 +51,18 @@ export function ListPage() {
     );
   }, [items, query]);
 
-  // Totais por mercado (soma de preço × quantidade dos itens com preço naquele mercado).
-  const totals = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const item of items) {
-      const cells = resolveRowPrices(item.product.id, markets, matrix);
-      for (const cell of cells) {
-        if (cell.value != null) map[cell.marketId] = (map[cell.marketId] ?? 0) + cell.value * item.quantity;
-      }
-    }
-    return map;
-  }, [items, markets, matrix]);
-
-  const totalValues = Object.values(totals);
-  const cheapestTotal = totalValues.length ? Math.min(...totalValues) : null;
+  // Totais + cobertura por mercado usando o MESMO helper da comparação
+  // (`buildComparison`): só mercados com preço para TODOS os itens (cobertura
+  // completa) disputam o "mais barato". Evita destacar um total parcial.
+  const comparison = useMemo(
+    () => buildComparison(items, markets, matrix, {}),
+    [items, markets, matrix],
+  );
+  const totalsByMarket = useMemo(
+    () => new Map<string, MarketTotal>(comparison.totals.map((t) => [t.marketId, t])),
+    [comparison],
+  );
+  const hasAnyTotal = comparison.totals.some((t) => t.total > 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -177,29 +177,50 @@ export function ListPage() {
                   );
                 })}
               </tbody>
-              {totalValues.length > 0 && (
+              {hasAnyTotal && (
                 <tfoot>
                   <tr className="border-t-2 border-border bg-bg/50">
                     <td className="px-4 py-3 font-bold text-text" colSpan={2}>
                       Total por mercado
                     </td>
                     {markets.map((m) => {
-                      const total = totals[m.id];
-                      const isCheapest = total != null && total === cheapestTotal;
+                      const entry = totalsByMarket.get(m.id);
+                      const total = entry?.total ?? 0;
+                      const incomplete = !!entry && !entry.complete && total > 0;
+                      // Só o mercado de cobertura COMPLETA é destacado como mais barato.
+                      const isCheapest = m.id === comparison.cheapestMarketId;
                       return (
                         <td
                           key={m.id}
+                          title={
+                            incomplete
+                              ? 'Sem preço para todos os itens — total parcial'
+                              : undefined
+                          }
                           className={cn(
                             'money px-4 py-3 text-right font-extrabold',
                             isCheapest ? 'text-primary-active' : 'text-text',
+                            incomplete && 'text-text-subtle',
                           )}
                         >
-                          {total != null ? formatCurrency(total) : '—'}
+                          {total > 0 ? formatCurrency(total) : '—'}
+                          {incomplete && (
+                            <span className="ml-1 align-super text-[10px]" aria-hidden="true">
+                              *
+                            </span>
+                          )}
                         </td>
                       );
                     })}
                     <td />
                   </tr>
+                  {comparison.totals.some((t) => !t.complete && t.total > 0) && (
+                    <tr>
+                      <td colSpan={markets.length + 3} className="px-4 pb-3 text-xs text-text-subtle">
+                        * Mercado sem preço para todos os itens — não entra na escolha do mais barato.
+                      </td>
+                    </tr>
+                  )}
                 </tfoot>
               )}
             </table>

@@ -88,6 +88,10 @@ def _db() -> Generator[None, None, None]:
                 ),
             ]
         )
+        # Garante que mercados/produtos sejam inseridos antes dos preços
+        # (FKs habilitadas: o pai precisa existir). Price não tem relationship,
+        # então o flush explícito garante a ordem.
+        db.flush()
         db.add_all(
             [
                 Price(product_id="p1", market_id="giassi", value=5.49, source="crowd"),

@@ -8,6 +8,7 @@ import { Badge, Button, Card, ProductImage } from '@/components';
 import { formatCurrency } from '@/lib/currency';
 import { useToast } from '@/hooks/useToast';
 import { useList } from '@/features/list/ListContext';
+import { registerSearchEvent } from '@/services';
 import type { ProductWithPrice } from '@/services';
 
 export interface ProductCardProps {
@@ -21,6 +22,8 @@ export function ProductCard({ product }: ProductCardProps) {
 
   function handleAdd() {
     addItem(product);
+    // Telemetria: produto selecionado/adicionado (silenciosa, não bloqueia a UI).
+    void registerSearchEvent({ productId: product.id }).catch(() => undefined);
     toast(`${product.name} adicionado à lista`, 'success');
     // Feedback visual temporário no botão (sem recarregar a página).
     setJustAdded(true);

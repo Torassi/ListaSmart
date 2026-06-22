@@ -34,11 +34,20 @@ export function AddProductSlideOver({ open, onClose, markets }: AddProductSlideO
     defaultValues: { name: '', category: undefined, quantity: 1, marketId: '', price: undefined },
   });
 
-  function onSubmit(values: ProductPriceInput) {
-    addManualItem(values);
-    toast(`${values.name} adicionado à lista`, 'success');
-    reset();
-    onClose();
+  async function onSubmit(values: ProductPriceInput) {
+    // Aguarda a API: só fecha/limpa no sucesso; em erro mantém o form e os dados.
+    // `isSubmitting` (rhf) fica ativo durante o await e bloqueia envio duplicado.
+    try {
+      await addManualItem(values);
+      toast(`${values.name} adicionado à lista`, 'success');
+      reset();
+      onClose();
+    } catch (err) {
+      toast(
+        err instanceof Error ? err.message : 'Não foi possível adicionar o produto.',
+        'error',
+      );
+    }
   }
 
   function handleClose() {
@@ -57,7 +66,7 @@ export function AddProductSlideOver({ open, onClose, markets }: AddProductSlideO
           <Button variant="ghost" onClick={handleClose}>
             Cancelar
           </Button>
-          <Button type="submit" form="add-product-form" isLoading={isSubmitting}>
+          <Button type="submit" form="add-product-form" isLoading={isSubmitting} disabled={isSubmitting}>
             Adicionar à lista
           </Button>
         </div>

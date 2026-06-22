@@ -6,23 +6,43 @@
  * os itens disputam "mais barato"). Banner do mais barato + tabela por mercado.
  */
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Crown } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { BookmarkCheck, Crown } from 'lucide-react';
 import { Badge, Button, Card, CardBody, ProductImage } from '@/components';
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/currency';
-import { compareList } from '@/services/api/comparison';
+import { queryKeys } from '@/lib/queryKeys';
+import { useToast } from '@/hooks/useToast';
+import { compareList, createComparisonSnapshot } from '@/services/api/comparison';
 import { useList, useLists } from '@/features/list/ListContext';
 import { CheapestMarketBanner } from './CheapestMarketBanner';
 
 export function ComparePage() {
   const { items } = useList();
   const { activeId } = useLists();
+  const { toast } = useToast();
+  const qc = useQueryClient();
 
   const comparisonQuery = useQuery({
-    queryKey: ['comparison', activeId],
+    queryKey: queryKeys.comparison(activeId),
     queryFn: () => compareList(activeId),
     enabled: !!activeId && items.length > 0,
+  });
+
+  // Ação explícita: registra a comparação atual (snapshot) — alimenta economia
+  // recente e analytics. Exige cobertura completa (validado no back-end).
+  const snapshotMutation = useMutation({
+    mutationFn: () => createComparisonSnapshot(activeId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.analytics });
+      void qc.invalidateQueries({ queryKey: queryKeys.savingsRecent });
+      toast('Economia registrada com sucesso.', 'success');
+    },
+    onError: (err) =>
+      toast(
+        err instanceof Error ? err.message : 'Não foi possível registrar a economia.',
+        'error',
+      ),
   });
 
   if (items.length === 0) {
@@ -49,11 +69,23 @@ export function ComparePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="text-2xl font-extrabold tracking-tight text-text">Comparador de preços</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          Preços da sua lista lado a lado nos supermercados da região.
-        </p>
+      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-text">Comparador de preços</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            Preços da sua lista lado a lado nos supermercados da região.
+          </p>
+        </div>
+        {comparison?.cheapestMarketId && (
+          <Button
+            onClick={() => snapshotMutation.mutate()}
+            isLoading={snapshotMutation.isPending}
+            disabled={snapshotMutation.isPending}
+            leftIcon={<BookmarkCheck className="h-4 w-4" aria-hidden="true" />}
+          >
+            Registrar economia
+          </Button>
+        )}
       </header>
 
       {!comparison ? (

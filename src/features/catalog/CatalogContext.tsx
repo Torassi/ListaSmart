@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Product } from '@/types';
 import type { CatalogProductInput } from '@/lib/validation';
+import { queryKeys } from '@/lib/queryKeys';
 import { createProduct } from '@/services/api/catalog';
 
 interface CatalogContextValue {
@@ -34,9 +35,14 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         ...(input.barcode ? { barcode: input.barcode } : {}),
         ...(imageUrl ? { imageUrl } : {}),
       });
+      // Novo produto + preço inicial: invalida catálogo, matriz e tudo que
+      // depende de preços (comparações, analytics e economia recente).
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['products'] }),
-        qc.invalidateQueries({ queryKey: ['priceMatrix'] }),
+        qc.invalidateQueries({ queryKey: queryKeys.products }),
+        qc.invalidateQueries({ queryKey: queryKeys.priceMatrix }),
+        qc.invalidateQueries({ queryKey: ['comparison'] }),
+        qc.invalidateQueries({ queryKey: queryKeys.analytics }),
+        qc.invalidateQueries({ queryKey: queryKeys.savingsRecent }),
       ]);
       return product;
     },

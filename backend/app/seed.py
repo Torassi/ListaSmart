@@ -132,6 +132,9 @@ def seed() -> None:
                 )
             )
 
+        # FKs habilitadas: garante mercados/produtos inseridos antes dos preços.
+        db.flush()
+
         # Preços (um por produto × mercado)
         for pid, *_ in CATALOG:
             base = BASE_PRICES.get(pid, 9.9)

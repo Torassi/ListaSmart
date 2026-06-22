@@ -1,4 +1,14 @@
 """Schemas Pydantic (contratos de entrada/saída da API)."""
+from app.schemas.analytics import (
+    AnalyticsData,
+    CategoryShare,
+    ComparisonSnapshotOut,
+    MarketCompetitiveness,
+    PriceOpportunity,
+    RankedProduct,
+    SavingsSummary,
+    SearchEventInput,
+)
 from app.schemas.auth import AuthResponse, LoginInput, SignupInput
 from app.schemas.comparison import (
     ComparisonCell,
@@ -42,4 +52,12 @@ __all__ = [
     "ComparisonRow",
     "ComparisonCell",
     "MarketTotal",
+    "AnalyticsData",
+    "RankedProduct",
+    "CategoryShare",
+    "MarketCompetitiveness",
+    "PriceOpportunity",
+    "SearchEventInput",
+    "ComparisonSnapshotOut",
+    "SavingsSummary",
 ]

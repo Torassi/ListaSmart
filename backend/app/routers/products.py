@@ -66,6 +66,9 @@ def create_product(
         created_by=user.id,
     )
     db.add(product)
+    # FKs habilitadas: insere o produto antes do preço que o referencia
+    # (Price não tem relationship, então a ordem é garantida pelo flush).
+    db.flush()
 
     # Preço inicial no mercado selecionado.
     db.add(

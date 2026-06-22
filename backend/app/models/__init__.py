@@ -1,4 +1,5 @@
 """Modelos SQLAlchemy do Lista Smart."""
+from app.models.analytics import ComparisonSnapshot, SearchEvent
 from app.models.market import Market
 from app.models.price import Price
 from app.models.product import Product
@@ -13,4 +14,6 @@ __all__ = [
     "ShoppingList",
     "ListItem",
     "list_collaborators",
+    "SearchEvent",
+    "ComparisonSnapshot",
 ]

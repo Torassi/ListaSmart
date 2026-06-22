@@ -6,10 +6,12 @@
  * da API vem de `VITE_API_BASE_URL` (ex.: `http://localhost:8000/api`) e as
  * requisições enviam o cookie httpOnly de sessão (`credentials: 'include'`).
  *
- * NÃO inclui (seguem em mock): analytics, economia recente e favoritos.
+ * Favoritos seguem fora do backend nesta etapa (ver services/home.ts).
  */
 export * as authApi from './auth';
 export * as catalogApi from './catalog';
 export * as listsApi from './lists';
 export * as pricesApi from './prices';
 export * as comparisonApi from './comparison';
+export * as analyticsApi from './analytics';
+export * as savingsApi from './savings';

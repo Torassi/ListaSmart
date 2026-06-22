@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders, screen } from '@/test/utils';
+import { seedSession } from '@/test/fakeBackend';
 import { AddProductSlideOver } from './AddProductSlideOver';
 import type { Market } from '@/types';
 
@@ -18,6 +19,7 @@ describe('AddProductSlideOver', () => {
   });
 
   it('salva e fecha quando os dados são válidos', async () => {
+    seedSession(); // o cadastro manual exige autenticação (POST /products + lista)
     const onClose = vi.fn();
     renderWithProviders(<AddProductSlideOver open onClose={onClose} markets={markets} />);
 

@@ -9,15 +9,39 @@
  * A sessão começa DESLOGADA a cada teste. Use `seedSession()` para autenticar.
  */
 import type {
+  AnalyticsData,
+  ComparisonSnapshot,
   ListComparison,
   Market,
   Product,
+  ProductCategory,
+  SavingsSummary,
   ShoppingList,
   User,
 } from '@/types';
 
 interface Account extends User {
   password: string;
+}
+
+interface SearchEventRow {
+  userId: string | null;
+  productId: string | null;
+  category: string | null;
+  query: string | null;
+}
+
+interface SnapshotRow {
+  id: number;
+  userId: string;
+  shoppingListId: string;
+  listName: string;
+  cheapestMarketId: string | null;
+  mostExpensiveMarketId: string | null;
+  cheapestTotal: number;
+  mostExpensiveTotal: number;
+  savedAmount: number;
+  createdAt: string;
 }
 
 interface State {
@@ -27,6 +51,9 @@ interface State {
   products: Product[];
   prices: Record<string, Record<string, number>>;
   lists: ShoppingList[];
+  searchEvents: SearchEventRow[];
+  snapshots: SnapshotRow[];
+  manualPriceKeys: Set<string>;
   seq: number;
 }
 
@@ -60,7 +87,18 @@ function freshState(): State {
     p1: { giassi: 5.49, bistek: 5.0 },
     p2: { giassi: 5.29, bistek: 4.97 },
   };
-  return { session: null, users: [], markets, products, prices, lists: [], seq: 1 };
+  return {
+    session: null,
+    users: [],
+    markets,
+    products,
+    prices,
+    lists: [],
+    searchEvents: [],
+    snapshots: [],
+    manualPriceKeys: new Set(),
+    seq: 1,
+  };
 }
 
 /** Reinicia o estado (chamar antes de cada teste). */
@@ -85,6 +123,11 @@ export function seedSession(
 
 function toUser(a: Account): User {
   return { id: a.id, name: a.name, email: a.email, avatarUrl: a.avatarUrl };
+}
+
+/** Introspecção para testes: eventos de busca registrados. */
+export function getRecordedSearchEvents(): ReadonlyArray<SearchEventRow> {
+  return state.searchEvents;
 }
 
 const ERR = {
@@ -186,6 +229,113 @@ function buildComparison(list: ShoppingList): ListComparison {
   };
 }
 
+function _round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function serializeSnapshot(s: SnapshotRow): ComparisonSnapshot {
+  return {
+    id: s.id,
+    shoppingListId: s.shoppingListId,
+    listName: s.listName,
+    cheapestMarketId: s.cheapestMarketId,
+    mostExpensiveMarketId: s.mostExpensiveMarketId,
+    cheapestTotal: s.cheapestTotal,
+    mostExpensiveTotal: s.mostExpensiveTotal,
+    savedAmount: s.savedAmount,
+    createdAt: s.createdAt,
+  };
+}
+
+function buildSavings(userId: string): SavingsSummary[] {
+  const name = (id: string | null) =>
+    state.markets.find((m) => m.id === id)?.name ?? '—';
+  return state.snapshots
+    .filter((s) => s.userId === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 10)
+    .map((s) => ({
+      id: String(s.id),
+      listName: s.listName,
+      cheapestMarket: name(s.cheapestMarketId),
+      total: s.cheapestTotal,
+      savedAmount: s.savedAmount,
+      date: s.createdAt,
+    }));
+}
+
+function buildAnalytics(userId: string): AnalyticsData {
+  const marketName = (id: string) =>
+    state.markets.find((m) => m.id === id)?.name ?? id;
+
+  // Oportunidades: produtos com maior diferença entre menor e maior preço.
+  const opportunities = state.products
+    .map((product) => {
+      const byMarket = state.prices[product.id] ?? {};
+      const ids = Object.keys(byMarket);
+      if (ids.length < 2) return null;
+      const minId = ids.reduce((a, b) => (byMarket[a] <= byMarket[b] ? a : b));
+      const maxId = ids.reduce((a, b) => (byMarket[a] >= byMarket[b] ? a : b));
+      const diff = byMarket[maxId] - byMarket[minId];
+      if (diff <= 0) return null;
+      return {
+        product,
+        cheapestMarket: marketName(minId),
+        mostExpensiveMarket: marketName(maxId),
+        minPrice: _round2(byMarket[minId]),
+        maxPrice: _round2(byMarket[maxId]),
+        diff: _round2(diff),
+      };
+    })
+    .filter((o): o is NonNullable<typeof o> => o !== null)
+    .sort((a, b) => b.diff - a.diff)
+    .slice(0, 10);
+
+  // Competitividade: vitórias por mercado nos snapshots do usuário.
+  const wins = new Map<string, number>();
+  const userSnaps = state.snapshots.filter((s) => s.userId === userId);
+  for (const s of userSnaps) {
+    if (s.cheapestMarketId) wins.set(s.cheapestMarketId, (wins.get(s.cheapestMarketId) ?? 0) + 1);
+  }
+  const marketCompetitiveness = state.markets
+    .map((market) => ({ market, cheapestWins: wins.get(market.id) ?? 0 }))
+    .sort((a, b) => b.cheapestWins - a.cheapestWins);
+  const cheapestMarketByList =
+    marketCompetitiveness[0]?.cheapestWins > 0 ? marketCompetitiveness[0].market.name : '—';
+  const avgSavingsPerUser = userSnaps.length
+    ? _round2(userSnaps.reduce((sum, s) => sum + s.savedAmount, 0) / userSnaps.length)
+    : 0;
+
+  // Buscas: categorias e produtos mais pesquisados (globais).
+  const catCount = new Map<string, number>();
+  const prodCount = new Map<string, number>();
+  for (const e of state.searchEvents) {
+    if (e.category) catCount.set(e.category, (catCount.get(e.category) ?? 0) + 1);
+    if (e.productId) prodCount.set(e.productId, (prodCount.get(e.productId) ?? 0) + 1);
+  }
+  const categoryShares = [...catCount.entries()]
+    .map(([category, searches]) => ({ category: category as ProductCategory, searches }))
+    .sort((a, b) => b.searches - a.searches);
+  const mostSearchedProducts = [...prodCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([productId, searches]) => {
+      const product = state.products.find((p) => p.id === productId);
+      return product ? { product, searches } : null;
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  return {
+    cheapestMarketByList,
+    avgSavingsPerUser,
+    manualPricesCount: state.manualPriceKeys.size,
+    mostSearchedProducts,
+    categoryShares,
+    marketCompetitiveness,
+    opportunities,
+  };
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function handle(method: string, path: string, body: any): Promise<Response> {
   const [rawPath, queryString] = path.split('?');
@@ -255,7 +405,10 @@ async function handle(method: string, path: string, body: any): Promise<Response
     if (!currentUser()) return ERR.unauthorized();
     if (!state.markets.some((m) => m.id === body.marketId)) return ERR.notFound();
     if (body.barcode && state.products.some((p) => p.barcode === body.barcode)) {
-      return ERR.conflict('barcode_taken', 'Código de barras já cadastrado.');
+      return ERR.conflict(
+        'barcode_taken',
+        'Já existe um produto com este código de barras.',
+      );
     }
     if (!body.name || String(body.name).trim().length < 2) return ERR.invalid('name');
     const product: Product = {
@@ -268,6 +421,7 @@ async function handle(method: string, path: string, body: any): Promise<Response
     };
     state.products.push(product);
     (state.prices[product.id] ??= {})[body.marketId] = body.price;
+    state.manualPriceKeys.add(`${product.id}:${body.marketId}`);
     return json(withPrice(product), 201);
   }
 
@@ -278,6 +432,7 @@ async function handle(method: string, path: string, body: any): Promise<Response
     if (!state.products.some((p) => p.id === body.productId)) return ERR.notFound();
     if (!state.markets.some((m) => m.id === body.marketId)) return ERR.notFound();
     (state.prices[body.productId] ??= {})[body.marketId] = body.value;
+    state.manualPriceKeys.add(`${body.productId}:${body.marketId}`);
     return json(
       {
         productId: body.productId,
@@ -288,6 +443,35 @@ async function handle(method: string, path: string, body: any): Promise<Response
       },
       201,
     );
+  }
+
+  // ---- Analytics (privado) ----
+  if (rawPath === '/analytics' && method === 'GET') {
+    const user = currentUser();
+    if (!user) return ERR.unauthorized();
+    return json(buildAnalytics(user.id));
+  }
+  if (rawPath === '/analytics/search-events' && method === 'POST') {
+    const user = currentUser();
+    if (!user) return ERR.unauthorized();
+    const productId = body?.productId ?? null;
+    const category = body?.category ?? null;
+    const query = body?.query?.trim() ? body.query.trim() : null;
+    if (!productId && !category && !query) return ERR.invalid('evento vazio');
+    state.searchEvents.push({
+      userId: user.id,
+      productId: state.products.some((p) => p.id === productId) ? productId : null,
+      category,
+      query,
+    });
+    return json({ ok: true }, 201);
+  }
+
+  // ---- Economia recente (privado) ----
+  if (rawPath === '/savings/recent' && method === 'GET') {
+    const user = currentUser();
+    if (!user) return ERR.unauthorized();
+    return json(buildSavings(user.id));
   }
 
   // ---- Listas (privadas) ----
@@ -363,6 +547,37 @@ async function handle(method: string, path: string, body: any): Promise<Response
     if (segments[2] === 'comparison' && method === 'GET') {
       return json(buildComparison(list));
     }
+
+    if (segments[2] === 'comparison-snapshots' && method === 'POST') {
+      const comp = buildComparison(list);
+      if (!comp.cheapestMarketId) {
+        return json(
+          { error: { code: 'incomplete_coverage', message: 'Cobertura incompleta.' } },
+          400,
+        );
+      }
+      const totals = new Map(comp.totals.map((t) => [t.marketId, t.total]));
+      // Dedupe: snapshot recente da mesma lista é reaproveitado.
+      const recent = state.snapshots.find(
+        (s) => s.userId === user.id && s.shoppingListId === list.id,
+      );
+      if (recent) return json(serializeSnapshot(recent), 201);
+
+      const snap: SnapshotRow = {
+        id: state.seq++,
+        userId: user.id,
+        shoppingListId: list.id,
+        listName: list.name,
+        cheapestMarketId: comp.cheapestMarketId,
+        mostExpensiveMarketId: comp.mostExpensiveMarketId || null,
+        cheapestTotal: totals.get(comp.cheapestMarketId) ?? 0,
+        mostExpensiveTotal: totals.get(comp.mostExpensiveMarketId) ?? 0,
+        savedAmount: comp.savedAmount,
+        createdAt: new Date(Date.now() + state.seq++).toISOString(),
+      };
+      state.snapshots.push(snap);
+      return json(serializeSnapshot(snap), 201);
+    }
   }
 
   return json({ error: { code: 'not_found', message: `Sem rota: ${method} ${rawPath}` } }, 404);
@@ -373,7 +588,11 @@ export function installFakeBackend(): void {
   resetFakeBackend();
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
-    const path = url.replace(/^https?:\/\/[^/]+/, ''); // remove origin se houver
+    // Remove a origin (se houver) e o prefixo /api da base da API
+    // (VITE_API_BASE_URL=http://localhost:8000/api), deixando só a rota.
+    const path = url
+      .replace(/^https?:\/\/[^/]+/, '')
+      .replace(/^\/api(?=\/|$)/, '');
     const method = (init?.method ?? 'GET').toUpperCase();
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
     return handle(method, path, body);
