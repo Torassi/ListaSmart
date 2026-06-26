@@ -1,278 +1,441 @@
-# Lista Smart
+# ListaSmart
 
-Plataforma web de **listas de compras colaborativas** com foco em **economia** e
-**comparação de preços** entre supermercados da região (ex.: Giassi, Angeloni,
-Bistek, Fort Atacadista).
+Plataforma full-stack de **listas de compras colaborativas** com foco em **economia**, comparação de preços entre supermercados e indicadores de inteligência.
 
-Aplicação **full-stack integrada**: o front-end consome a API real, que persiste
-tudo em SQLite. Apenas alguns widgets de inteligência continuam em mock (ver
-[O que permanece em mock](#o-que-permanece-em-mock)).
+O projeto possui:
 
----
+- Front-end web em React + TypeScript + Vite;
+- Back-end em FastAPI + SQLAlchemy + SQLite;
+- Banco local SQLite gerenciado por Alembic;
+- Autenticação com sessão em cookie httpOnly + proteção CSRF;
+- Aplicação mobile demonstrativa com Expo + WebView, carregando o mesmo front-end web.
 
-## Arquitetura atual
+## Visão geral da arquitetura
 
-- **Front-end:** React + Vite + TypeScript (strict) + **TanStack Query** (estado de servidor) e Context API (estado de UI).
-- **Back-end:** Python + **FastAPI** + **SQLAlchemy 2.0**.
-- **Banco de dados:** **SQLite** (`backend/listasmart.db`).
-- **Evolução do banco:** **Alembic** (única fonte de criação/evolução do schema).
-- **Autenticação:** **JWT** assinado, entregue em **cookie httpOnly** (o token nunca chega ao JavaScript).
-- **Segurança:** proteção **CSRF** por **double-submit cookie** (header `X-CSRF-Token` em métodos que alteram estado), hash de senha com **bcrypt**, cookie `SameSite`/`Secure` configuráveis.
-- **Integrado à API:** autenticação, produtos/catálogo, preços, listas e comparação vêm do SQLite via API.
-- **Ainda em mock / armazenamento local:** analytics, favoritos, economia recente e algumas preferências de perfil (região/mercados favoritos em `localStorage`).
+```text
+Navegador / WebView
+        |
+        | /api
+        v
+Vite dev server - http://localhost:5173 ou http://IP_DO_PC:5173
+        |
+        | proxy /api
+        v
+FastAPI - http://127.0.0.1:8000
+        |
+        v
+SQLite - backend/listasmart.db
+```
 
-Outras libs: React Router, Tailwind CSS v3, react-hook-form + zod, Recharts, lucide-react, ESLint + Prettier, Vitest + Testing Library (front); Pydantic v2, passlib + bcrypt, PyJWT (back).
+O front-end deve chamar a API usando URL relativa:
 
----
+```env
+VITE_API_BASE_URL=/api
+```
+
+Com isso, tanto o navegador do PC quanto a WebView no celular usam a mesma origem do front-end. O Vite encaminha `/api` para o FastAPI.
+
+## Tecnologias
+
+### Front-end
+
+- React
+- TypeScript
+- Vite
+- React Router
+- TanStack Query
+- Tailwind CSS
+- Recharts
+- Vitest + Testing Library
+
+### Back-end
+
+- Python
+- FastAPI
+- SQLAlchemy 2.0
+- Alembic
+- SQLite
+- Pydantic
+- PyJWT
+- passlib + bcrypt
+- Pytest
+
+### Mobile demonstrativo
+
+- Expo
+- React Native
+- React Native WebView
 
 ## Pré-requisitos
 
-- **Node 18+** e **npm**
-- **Python 3.11+** (o SQLite vem embutido no Python via módulo `sqlite3` — **não precisa instalar separadamente**)
+Instale no computador:
 
----
+- Node.js 18 ou superior;
+- npm;
+- Python 3.11 ou superior;
+- Git;
+- Expo Go no celular, caso queira testar o mobile.
 
-## Configuração do front-end (PowerShell)
+O SQLite não precisa ser instalado separadamente, pois o Python já inclui suporte via módulo `sqlite3`.
 
-```powershell
-cd C:\Users\User\Desktop\ListaSmart
-Copy-Item .env.example .env
+## Como rodar em um novo computador
+
+Clone o repositório e entre na pasta:
+
+```bat
+git clone LINK_DO_REPOSITORIO
+cd ListaSmart
+```
+
+Se você baixou o ZIP em vez de clonar, apenas extraia e entre na pasta do projeto.
+
+## Configurar o front-end
+
+Na raiz do projeto:
+
+```bat
 npm install
-npm.cmd run dev
+copy .env.example .env
 ```
 
-- Front-end: **http://localhost:5173**
-- O `.env` do front aponta para a API: `VITE_API_BASE_URL=http://localhost:8000/api`
+Confira se o arquivo `.env` da raiz contém:
 
----
+```env
+VITE_API_BASE_URL=/api
+```
 
-## Configuração do back-end (PowerShell)
+Não coloque `localhost:8000` nem IP fixo nessa variável. Ela deve ficar como `/api`.
 
-```powershell
-cd C:\Users\User\Desktop\ListaSmart\backend
+## Configurar o back-end
+
+Entre na pasta do back-end:
+
+```bat
+cd backend
+```
+
+Crie a venv:
+
+```bat
+py -m venv .venv
+```
+
+Se `py` não funcionar, use:
+
+```bat
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
 ```
 
-> **Sobre ativar a venv:** caso `.\.venv\Scripts\Activate.ps1` não exista (ou a
-> Execution Policy do PowerShell bloqueie scripts), **não é necessário ativar** o
-> ambiente virtual. Basta chamar os executáveis da venv diretamente:
->
-> - `.\.venv\Scripts\python.exe`
-> - `.\.venv\Scripts\alembic.exe`
+Instale as dependências:
 
-### SECRET_KEY (obrigatória)
+```bat
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
 
-O back-end **recusa iniciar** enquanto `SECRET_KEY` estiver vazia, com valor de
-exemplo ou muito curta. Gere um valor forte:
+Crie o `.env` do back-end:
 
-```powershell
+```bat
+copy .env.example .env
+```
+
+Gere uma `SECRET_KEY`:
+
+```bat
 .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Copie o resultado e **substitua manualmente** o valor de `SECRET_KEY` em
-`backend\.env`. O `backend\.env.example` traz apenas um **placeholder** e deixa
-claro que ele precisa ser trocado.
+Copie o valor gerado e coloque no arquivo:
 
-### Banco SQLite (ordem correta)
+```text
+backend\.env
+```
 
-```powershell
+Exemplo de configuração para desenvolvimento local:
+
+```env
+DATABASE_URL=sqlite:///./listasmart.db
+SECRET_KEY=COLE_A_CHAVE_GERADA_AQUI
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+COOKIE_NAME=listasmart_session
+COOKIE_SECURE=false
+COOKIE_SAMESITE=lax
+```
+
+## Criar e popular o banco SQLite
+
+Ainda dentro da pasta `backend`:
+
+```bat
 .\.venv\Scripts\alembic.exe upgrade head
 .\.venv\Scripts\python.exe -m app.seed
 ```
 
-- **Alembic** é a **única fonte** de criação e evolução do schema (`alembic upgrade head` cria todas as tabelas a partir de um banco inexistente).
-- O **seed** **não cria tabelas** — apenas insere os dados iniciais (usuário demo, mercados, catálogo e preços). É **idempotente**: rodar de novo não duplica nada.
-- O arquivo gerado é **`backend/listasmart.db`**.
-- **SQLite não precisa ser instalado** separadamente (usa o `sqlite3` do Python).
-- **Não versionar:** `.env`, `.venv`, `*.db`, `node_modules` e `dist`.
+Isso cria o banco local:
 
-### Recriação do banco em desenvolvimento
-
-Quando o schema mudar e o banco local **não** tiver dados importantes:
-
-```powershell
-Remove-Item .\listasmart.db -ErrorAction SilentlyContinue
-.\.venv\Scripts\alembic.exe upgrade head
-.\.venv\Scripts\python.exe -m app.seed
+```text
+backend/listasmart.db
 ```
 
-> ⚠️ **Não** faça isso em produção nem quando houver dados importantes — apague o
-> banco apenas em desenvolvimento descartável.
+O seed cria dados iniciais, incluindo uma conta de demonstração.
 
----
+## Conta de demonstração
 
-## Execução
-
-**Back-end** (um terminal):
-
-```powershell
-cd C:\Users\User\Desktop\ListaSmart\backend
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```text
+E-mail: demo@listasmart.com
+Senha: 12345678
 ```
 
-**Front-end** (outro terminal):
+## Rodar o projeto web no PC
 
-```powershell
-cd C:\Users\User\Desktop\ListaSmart
-npm.cmd run dev
+Você precisa de dois terminais abertos.
+
+### Terminal 1 - back-end
+
+Na pasta `backend`:
+
+```bat
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-URLs:
+Teste a API:
 
-- Aplicação: **http://localhost:5173**
-- API: **http://localhost:8000**
-- Swagger (docs): **http://localhost:8000/docs**
-- Healthcheck: **http://localhost:8000/api/health**
-
-> Use **sempre `localhost`** em ambos (front e API). Não misture `localhost` com
-> `127.0.0.1`: para o navegador são origens diferentes, e essa mistura quebra
-> **CORS** e o envio do **cookie** de sessão.
-
-### Conta de demonstração
-
-Criada pelo seed:
-
-- **E-mail:** `demo@listasmart.com`
-- **Senha:** `12345678`
-
----
-
-## Endpoints (todos sob o prefixo `/api`)
-
-**Autenticação**
-
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/auth/signup` | Cadastro (define cookie de sessão + CSRF) |
-| POST | `/api/auth/login` | Login (define cookie de sessão + CSRF) |
-| POST | `/api/auth/logout` | Logout (limpa os cookies) |
-| GET | `/api/auth/me` | Usuário autenticado (reidrata a sessão) |
-| PATCH | `/api/auth/me` | Edição básica do perfil (`name`, `avatarUrl`) |
-
-**Catálogo**
-
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/products` | Catálogo; filtros `q`, `category`, `barcode` |
-| GET | `/api/products/{id}` | Produto por id |
-| POST | `/api/products` | Cadastro manual de produto (+ preço inicial); requer auth |
-| GET | `/api/categories` | Categorias distintas |
-| GET | `/api/markets` | Supermercados |
-
-**Preços**
-
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/prices/matrix` | Matriz de preços (`productId`/`marketId` opcionais) |
-| POST | `/api/prices` | Registrar/atualizar preço manual; requer auth |
-
-**Listas** (todas requerem autenticação e validam a propriedade da lista)
-
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/lists` | Listas do usuário (ordenadas por atividade recente) |
-| POST | `/api/lists` | Criar lista |
-| GET | `/api/lists/{id}` | Buscar lista por id |
-| PATCH | `/api/lists/{id}` | Renomear lista |
-| DELETE | `/api/lists/{id}` | Excluir lista |
-| POST | `/api/lists/{id}/items` | Adicionar produto à lista |
-| PATCH | `/api/lists/{id}/items/{productId}` | Alterar quantidade |
-| DELETE | `/api/lists/{id}/items/{productId}` | Remover item |
-| DELETE | `/api/lists/{id}/items` | Limpar a lista |
-| GET | `/api/lists/{id}/comparison` | Comparar a lista entre supermercados |
-
-> Mutações autenticadas exigem o header **`X-CSRF-Token`** (o front lê o cookie
-> CSRF e o reenvia automaticamente). Editar itens atualiza `ShoppingList.updated_at`.
-
----
-
-## Comparação de preços
-
-- Cada mercado recebe um total e um marcador de **cobertura**: mercados **sem preço para todos os itens** da lista são marcados com **cobertura incompleta** (`complete: false`).
-- **Somente mercados com cobertura completa** disputam o **mais barato** e o **mais caro**.
-- A **economia** (`savedAmount`) é calculada **apenas entre mercados completos** — um mercado com preços parciais nunca é apontado como o mais barato.
-
----
-
-## Segurança
-
-- **JWT em cookie httpOnly** — o token nunca é exposto ao JavaScript (mitiga XSS); o front usa `credentials: 'include'`.
-- **CSRF (double-submit cookie):** o servidor emite um cookie CSRF legível pelo JS; o front o reenvia no header `X-CSRF-Token` em toda requisição que altera estado. Mutações autenticadas sem o token são rejeitadas (403).
-- **Senhas** com **bcrypt** (passlib); nunca em texto puro.
-- **`SECRET_KEY` obrigatória** via ambiente — a aplicação falha ao iniciar se ausente/fraca/de exemplo.
-- **Cookie configurável:** `COOKIE_SECURE`, `COOKIE_SAMESITE`, `COOKIE_NAME` (em produção HTTPS: `COOKIE_SECURE=true`; domínios distintos: `COOKIE_SAMESITE=none`).
-- **Propriedade das listas** validada em todas as operações privadas (um usuário nunca acessa lista de outro).
-- **Validação com zod** no front é só UX; o servidor (Pydantic + constraints no banco) é a fonte de verdade.
-- Pontos sensíveis estão marcados no código com comentários `SECURITY:`.
-
----
-
-## O que permanece em mock
-
-Intencionalmente ainda **não** integrados à API (continuam em mock/armazenamento local):
-
-- **Analytics** (dashboard de inteligência) — `src/services/analytics.ts`
-- **Economia recente** e **favoritos** da Home — `src/services/home.ts`
-- **Preferências de perfil** (região e mercados favoritos) — `localStorage` em `src/features/profile/PreferencesContext.tsx`
-
-> `src/services/auth.ts` é um mock **legado** mantido apenas como referência/para
-> seu próprio teste — o app usa `src/services/api/auth.ts` (JWT em cookie httpOnly).
-
----
-
-## Testes
-
-**Front-end:**
-
-```powershell
-cd C:\Users\User\Desktop\ListaSmart
-npm.cmd run lint
-npm.cmd run typecheck
-npm.cmd run test
-npm.cmd run build
-npm.cmd audit --audit-level=high --omit=dev
+```text
+http://localhost:8000/api/health
 ```
 
-**Back-end:**
+### Terminal 2 - front-end
 
-```powershell
-cd C:\Users\User\Desktop\ListaSmart\backend
+Na raiz do projeto:
+
+```bat
+npm run dev -- --host 0.0.0.0
+```
+
+Acesse no navegador:
+
+```text
+http://localhost:5173
+```
+
+## Rodar no celular pela rede local
+
+Para acessar pelo celular, o computador e o celular precisam estar na mesma rede.
+
+Descubra o IP do computador:
+
+```bat
+ipconfig
+```
+
+Procure o endereço IPv4. Exemplo:
+
+```text
+192.168.0.25
+```
+
+Com o back-end e o front-end rodando, acesse no celular:
+
+```text
+http://192.168.0.25:5173
+```
+
+Troque `192.168.0.25` pelo IP real do seu computador.
+
+Se o celular não conseguir abrir, confira:
+
+- se o front está rodando com `--host 0.0.0.0`;
+- se o back está rodando com `--host 0.0.0.0`;
+- se o Windows Firewall liberou Node.js e Python na rede privada;
+- se computador e celular estão na mesma rede.
+
+## Rodar o mobile demonstrativo com Expo + WebView
+
+O mobile é uma demonstração em Expo que abre o mesmo front-end web dentro de uma WebView.
+
+Entre na pasta mobile:
+
+```bat
+cd mobile
+npm install
+```
+
+Crie o arquivo `.env`:
+
+```bat
+copy .env.example .env
+```
+
+No `mobile/.env`, configure a URL do front usando o IP do computador:
+
+```env
+EXPO_PUBLIC_WEB_URL=http://IP_DO_COMPUTADOR:5173
+```
+
+Exemplo:
+
+```env
+EXPO_PUBLIC_WEB_URL=http://192.168.0.25:5173
+```
+
+Inicie o Expo:
+
+```bat
+npx expo start --tunnel --clear
+```
+
+Se o Expo perguntar se pode instalar `@expo/ngrok`, responda `y`.
+
+Depois, leia o QR Code com o app Expo Go.
+
+## URLs úteis
+
+```text
+Front-end web:       http://localhost:5173
+API FastAPI:         http://localhost:8000
+Swagger da API:      http://localhost:8000/docs
+Healthcheck da API:  http://localhost:8000/api/health
+Celular na rede:     http://IP_DO_COMPUTADOR:5173
+```
+
+## Testes e validação
+
+### Front-end
+
+Na raiz do projeto:
+
+```bat
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+### Back-end
+
+Na pasta `backend`:
+
+```bat
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m compileall app tests
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-Os testes do back-end usam um **SQLite temporário/isolado** (não tocam o banco de
-dev). Os testes do front exercitam o caminho real contexto → service → `fetch`
-contra um **fake backend em memória** (`src/test/fakeBackend.ts`).
+### Mobile
 
----
+Na pasta `mobile`:
 
-## CI
-
-O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda em cada push/PR na `main` e valida:
-
-- **Front-end:** lint, typecheck, testes, build e **auditoria de dependências** (`npm audit --audit-level=high`).
-- **Back-end:** testes (`pytest`), **compilação** (`compileall`) e **migrations** (`alembic upgrade head` em um SQLite temporário).
-
----
-
-## Estrutura
-
+```bat
+npx expo-doctor
+npx tsc --noEmit
 ```
+
+## Principais rotas da API
+
+Todas as rotas usam o prefixo `/api`.
+
+### Autenticação
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| POST | `/api/auth/signup` | Cadastrar usuário |
+| POST | `/api/auth/login` | Entrar no sistema |
+| POST | `/api/auth/logout` | Sair do sistema |
+| GET | `/api/auth/me` | Buscar usuário autenticado |
+| PATCH | `/api/auth/me` | Atualizar perfil |
+
+### Produtos, mercados e preços
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| GET | `/api/products` | Listar produtos |
+| GET | `/api/products/{id}` | Buscar produto por ID |
+| POST | `/api/products` | Criar produto |
+| GET | `/api/markets` | Listar mercados |
+| GET | `/api/prices/matrix` | Matriz de preços |
+| POST | `/api/prices` | Registrar ou atualizar preço |
+
+### Listas de compras
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| GET | `/api/lists` | Listar listas do usuário |
+| POST | `/api/lists` | Criar lista |
+| GET | `/api/lists/{id}` | Buscar lista |
+| PATCH | `/api/lists/{id}` | Renomear lista |
+| DELETE | `/api/lists/{id}` | Excluir lista |
+| POST | `/api/lists/{id}/items` | Adicionar item |
+| PATCH | `/api/lists/{id}/items/{productId}` | Alterar quantidade |
+| DELETE | `/api/lists/{id}/items/{productId}` | Remover item |
+| DELETE | `/api/lists/{id}/items` | Limpar lista |
+| GET | `/api/lists/{id}/comparison` | Comparar preços da lista |
+
+## Segurança
+
+- O token de sessão fica em cookie httpOnly.
+- O JavaScript do front-end não acessa o JWT diretamente.
+- Requisições autenticadas usam `credentials: include`.
+- Operações que alteram dados usam proteção CSRF por double-submit cookie.
+- Senhas são armazenadas com hash bcrypt.
+- `SECRET_KEY` deve ser gerada localmente e nunca versionada.
+
+## Arquivos que não devem ir para o Git
+
+Confira se estes arquivos/pastas não estão versionados:
+
+```text
+.env
+.env.*
+backend/.env
+backend/.venv/
+backend/listasmart.db
+*.db
+*.sqlite
+*.bak
+node_modules/
+mobile/node_modules/
+dist/
+mobile/.expo/
+```
+
+Os arquivos `.env.example` devem ser versionados, pois servem como modelo de configuração.
+
+## Estrutura do projeto
+
+```text
 ListaSmart/
-├── src/                      # front-end (React + Vite + TS)
-│   ├── app/                  # shell, rotas, providers, ProtectedRoute
-│   ├── components/           # Design System
-│   ├── features/             # auth, home, list, compare, analytics, profile, catalog
-│   ├── hooks/                # useToast, useDebounce
-│   ├── services/             # services integrados (api/) + mocks remanescentes (analytics, home)
-│   │   └── api/              # cliente real: auth, catalog, lists, prices, comparison
-│   ├── lib/                  # cn, moeda, validação (zod), comparação, preços
-│   ├── test/                 # setup + fake backend dos testes
-│   └── types/                # contratos compartilhados (espelham o back-end)
-├── backend/                  # API (FastAPI + SQLAlchemy + SQLite) — ver backend/README.md
-└── .github/workflows/ci.yml  # CI (front + back)
+├── src/                    # Front-end React + Vite
+├── public/                 # Arquivos públicos e imagens usadas pelo front
+├── img/                    # Imagens de referência dos produtos
+├── backend/                # API FastAPI + SQLite + Alembic
+│   ├── app/                # Código principal da API
+│   ├── alembic/            # Migrations do banco
+│   ├── tests/              # Testes do back-end
+│   └── requirements.txt
+├── mobile/                 # App Expo demonstrativo com WebView
+├── package.json            # Dependências/scripts do front-end
+├── vite.config.ts          # Configuração do Vite e proxy /api
+└── README.md
 ```
+
+## Observações para entrega acadêmica
+
+Para entregar ao professor, envie o link do repositório e avise que as instruções estão neste README.
+
+Antes de enviar, é recomendado rodar:
+
+```bat
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+E no back-end:
+
+```bat
+cd backend
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Se o professor for rodar em outro computador, ele deve criar os arquivos `.env` a partir dos `.env.example`, rodar as migrations e executar o seed.
