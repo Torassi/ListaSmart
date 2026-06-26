@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules'] },
+  // `mobile/` é um app Expo/React Native separado, com ESLint próprio
+  // (eslint-config-expo). Não deve ser lintado pela config web da raiz.
+  { ignores: ['dist', 'coverage', 'node_modules', 'mobile'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

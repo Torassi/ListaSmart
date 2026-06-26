@@ -1,8 +1,6 @@
 """Comparação de preços de uma lista e registro de snapshots (privadas)."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,9 +13,6 @@ from app.schemas import ComparisonSnapshotOut, ListComparison
 from app.services.comparison import build_comparison
 
 router = APIRouter(prefix="/lists", tags=["comparison"])
-
-# Janela curta para evitar registrar snapshots duplicados acidentalmente.
-_DEDUPE_WINDOW = timedelta(seconds=3)
 
 
 def _owned_list(db: Session, list_id: str, user: User) -> ShoppingList:
@@ -56,18 +51,33 @@ def create_comparison_snapshot(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ComparisonSnapshot:
-    """Calcula a comparação atual e registra um snapshot (histórico).
+    """Finaliza a lista: registra UM snapshot (economia) e a marca como finalizada.
 
-    Exige cobertura completa (ao menos um mercado com preço para todos os itens)
-    e evita duplicações muito próximas no tempo para a mesma lista.
+    Exige cobertura completa (ao menos um mercado com preço para todos os itens).
+    É idempotente POR LISTA: se a lista já tem um snapshot, ele é devolvido sem
+    duplicar dados no dashboard. Após finalizar, a lista não pode mais ser
+    editada nem excluída.
     """
     shopping_list = _owned_list(db, list_id, user)
+
+    # Idempotência por lista: um único snapshot por lista (evita duplicar economia).
+    existing = db.execute(
+        select(ComparisonSnapshot)
+        .where(ComparisonSnapshot.shopping_list_id == shopping_list.id)
+        .order_by(ComparisonSnapshot.created_at.desc())
+    ).scalars().first()
+    if existing is not None:
+        if not shopping_list.finalized:
+            shopping_list.finalized = True
+            db.commit()
+        return existing
+
     markets = db.execute(select(Market).order_by(Market.name)).scalars().all()
     comparison = build_comparison(shopping_list, markets, _price_matrix(db))
 
     if not comparison.cheapest_market_id:
         raise AppError(
-            "Nenhum mercado tem preço para todos os itens — não é possível registrar.",
+            "Nenhum mercado tem preço para todos os itens — não é possível finalizar.",
             code="incomplete_coverage",
             status_code=400,
         )
@@ -75,20 +85,6 @@ def create_comparison_snapshot(
     totals = {t.market_id: t.total for t in comparison.totals}
     cheapest_total = totals.get(comparison.cheapest_market_id, 0.0)
     most_expensive_total = totals.get(comparison.most_expensive_market_id, 0.0)
-
-    # Dedupe: se já existe um snapshot recente desta lista, devolve-o.
-    cutoff = datetime.now(timezone.utc) - _DEDUPE_WINDOW
-    recent = db.execute(
-        select(ComparisonSnapshot)
-        .where(
-            ComparisonSnapshot.user_id == user.id,
-            ComparisonSnapshot.shopping_list_id == shopping_list.id,
-            ComparisonSnapshot.created_at >= cutoff,
-        )
-        .order_by(ComparisonSnapshot.created_at.desc())
-    ).scalars().first()
-    if recent is not None:
-        return recent
 
     snapshot = ComparisonSnapshot(
         user_id=user.id,
@@ -101,6 +97,8 @@ def create_comparison_snapshot(
         saved_amount=comparison.saved_amount,
     )
     db.add(snapshot)
+    # Finaliza a lista: entra no dashboard e fica bloqueada para edição/exclusão.
+    shopping_list.finalized = True
     db.commit()
     db.refresh(snapshot)
     return snapshot

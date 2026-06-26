@@ -40,7 +40,9 @@ describe('múltiplas listas (integrado à API)', () => {
     seedSession();
     const { result } = setup();
 
-    act(() => result.current.lists.createList('Compra do mês'));
+    await act(async () => {
+      await result.current.lists.createList('Compra do mês');
+    });
     await waitFor(() => {
       expect(result.current.lists.lists).toHaveLength(1);
       expect(result.current.lists.activeId).toBeTruthy();
@@ -51,14 +53,18 @@ describe('múltiplas listas (integrado à API)', () => {
     seedSession();
     const { result } = setup();
 
-    act(() => result.current.lists.createList('Lista A'));
+    await act(async () => {
+      await result.current.lists.createList('Lista A');
+    });
     await waitFor(() => expect(result.current.lists.activeId).toBeTruthy());
     const firstId = result.current.lists.activeId;
 
     act(() => result.current.list.addItem(product));
     await waitFor(() => expect(result.current.list.items).toHaveLength(1));
 
-    act(() => result.current.lists.createList('Churrasco'));
+    await act(async () => {
+      await result.current.lists.createList('Churrasco');
+    });
     await waitFor(() => expect(result.current.lists.activeId).not.toBe(firstId));
     expect(result.current.list.items).toHaveLength(0);
 
@@ -70,11 +76,15 @@ describe('múltiplas listas (integrado à API)', () => {
     seedSession();
     const { result } = setup();
 
-    act(() => result.current.lists.createList('Lista A'));
+    await act(async () => {
+      await result.current.lists.createList('Lista A');
+    });
     await waitFor(() => expect(result.current.lists.lists).toHaveLength(1));
     const firstId = result.current.lists.activeId;
 
-    act(() => result.current.lists.createList('Lista B'));
+    await act(async () => {
+      await result.current.lists.createList('Lista B');
+    });
     await waitFor(() => expect(result.current.lists.lists).toHaveLength(2));
 
     act(() => result.current.lists.deleteList(firstId));

@@ -14,11 +14,15 @@ const product: ProductWithPrice = {
 };
 
 describe('ProductCard', () => {
-  it('exibe nome, categoria e menor preço', () => {
+  it('exibe nome, categoria e unidade, sem revelar preço', () => {
     renderWithProviders(<ProductCard product={product} />);
     expect(screen.getByText('Café Torrado')).toBeInTheDocument();
     expect(screen.getByText('Mercearia')).toBeInTheDocument();
-    expect(screen.getByText(/15,90/)).toBeInTheDocument();
+    expect(screen.getByText('500 g')).toBeInTheDocument();
+    // Catálogo NÃO antecipa a comparação: nada de preço/“a partir de”/R$.
+    expect(screen.queryByText(/15,90/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/a partir de/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/R\$/)).not.toBeInTheDocument();
   });
 
   it('ao adicionar, dá feedback (toast + estado "Adicionado") sem recarregar', async () => {

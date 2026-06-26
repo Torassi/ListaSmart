@@ -7,7 +7,7 @@
  */
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookmarkCheck, Crown } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Crown } from 'lucide-react';
 import { Badge, Button, Card, CardBody, ProductImage } from '@/components';
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/currency';
@@ -19,7 +19,7 @@ import { CheapestMarketBanner } from './CheapestMarketBanner';
 
 export function ComparePage() {
   const { items } = useList();
-  const { activeId } = useLists();
+  const { activeId, activeFinalized } = useLists();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -29,18 +29,20 @@ export function ComparePage() {
     enabled: !!activeId && items.length > 0,
   });
 
-  // Ação explícita: registra a comparação atual (snapshot) — alimenta economia
-  // recente e analytics. Exige cobertura completa (validado no back-end).
-  const snapshotMutation = useMutation({
+  // Ação explícita: FINALIZA a lista — registra a economia (snapshot) UMA vez e
+  // bloqueia a lista para edição/exclusão. Exige cobertura completa (back-end).
+  const finalizeMutation = useMutation({
     mutationFn: () => createComparisonSnapshot(activeId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.analytics });
       void qc.invalidateQueries({ queryKey: queryKeys.savingsRecent });
-      toast('Economia registrada com sucesso.', 'success');
+      void qc.invalidateQueries({ queryKey: ['lists'] });
+      void qc.invalidateQueries({ queryKey: queryKeys.comparison(activeId) });
+      toast('Lista finalizada — economia registrada no dashboard.', 'success');
     },
     onError: (err) =>
       toast(
-        err instanceof Error ? err.message : 'Não foi possível registrar a economia.',
+        err instanceof Error ? err.message : 'Não foi possível finalizar a lista.',
         'error',
       ),
   });
@@ -76,16 +78,31 @@ export function ComparePage() {
             Preços da sua lista lado a lado nos supermercados da região.
           </p>
         </div>
-        {comparison?.cheapestMarketId && (
-          <Button
-            onClick={() => snapshotMutation.mutate()}
-            isLoading={snapshotMutation.isPending}
-            disabled={snapshotMutation.isPending}
-            leftIcon={<BookmarkCheck className="h-4 w-4" aria-hidden="true" />}
-          >
-            Registrar economia
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Voltar para a lista (editar enquanto não finalizada). */}
+          <Link to="/lista">
+            <Button variant="secondary" leftIcon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />}>
+              {activeFinalized ? 'Ver lista' : 'Editar lista'}
+            </Button>
+          </Link>
+          {activeFinalized ? (
+            <Badge tone="primary" className="h-11 gap-1 px-4 text-sm">
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              Lista finalizada
+            </Badge>
+          ) : (
+            comparison?.cheapestMarketId && (
+              <Button
+                onClick={() => finalizeMutation.mutate()}
+                isLoading={finalizeMutation.isPending}
+                disabled={finalizeMutation.isPending}
+                leftIcon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+              >
+                Finalizar lista
+              </Button>
+            )
+          )}
+        </div>
       </header>
 
       {!comparison ? (

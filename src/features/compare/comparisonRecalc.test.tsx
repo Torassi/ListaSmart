@@ -53,7 +53,9 @@ describe('comparação recalculada após alterações na lista', () => {
     seedSession();
     const { result } = renderHook(useHarness, { wrapper: makeWrapper() });
 
-    act(() => result.current.lists.createList('Comparar'));
+    await act(async () => {
+      await result.current.lists.createList('Comparar');
+    });
     await waitFor(() => expect(result.current.lists.lists).toHaveLength(1));
 
     act(() => result.current.list.addItem(banana)); // bistek: 5.00 (qtd 1)

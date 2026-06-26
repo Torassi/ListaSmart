@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { BarChart3, ShieldCheck, Sparkles, Store } from 'lucide-react';
+import { BarChart3, ShieldCheck, ShoppingBasket, Sparkles, Store } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { LoginForm } from './LoginForm';
 import { SignupForm } from './SignupForm';
@@ -14,7 +14,7 @@ import { SocialButtons } from './SocialButtons';
 type Mode = 'login' | 'signup';
 
 const highlights = [
-  { icon: Store, text: 'Compare preços entre Giassi, Angeloni, Bistek e Comper' },
+  { icon: Store, text: 'Compare preços entre Giassi, Angeloni, Bistek e Fort Atacadista' },
   { icon: Sparkles, text: 'Monte listas colaborativas com sua família' },
   { icon: BarChart3, text: 'Veja onde economizar com dados claros' },
 ];
@@ -35,9 +35,9 @@ export function AuthPage() {
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Painel de marca (oculto em telas pequenas) */}
       <aside className="relative hidden flex-col justify-between overflow-hidden bg-primary p-10 text-white lg:flex">
-        <div className="flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-md bg-white/15 text-lg font-extrabold">
-            L
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-white/15 ring-1 ring-white/20">
+            <ShoppingBasket className="h-6 w-6" aria-hidden="true" />
           </span>
           <span className="text-xl font-extrabold tracking-tight">
             Lista<span className="text-white/80">Smart</span>
@@ -70,9 +70,9 @@ export function AuthPage() {
       <main className="flex items-center justify-center bg-bg px-4 py-10 sm:px-8">
         <div className="w-full max-w-md">
           {/* Marca compacta no mobile */}
-          <div className="mb-8 flex items-center gap-2 lg:hidden">
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-primary text-lg font-extrabold text-white">
-              L
+          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+            <span className="brand-gradient grid h-10 w-10 place-items-center rounded-xl text-white shadow-card">
+              <ShoppingBasket className="h-5 w-5" aria-hidden="true" />
             </span>
             <span className="text-lg font-extrabold tracking-tight text-text">
               Lista<span className="text-primary">Smart</span>

@@ -31,7 +31,7 @@ const rankingColumns: Column<RankedProduct>[] = [
   { key: 'name', header: 'Produto', cell: (row) => row.product.name },
   {
     key: 'searches',
-    header: 'Buscas',
+    header: 'Listas',
     align: 'right',
     cell: (row) => <span className="money font-semibold">{row.searches.toLocaleString('pt-BR')}</span>,
   },
@@ -147,15 +147,16 @@ export function AnalyticsPage() {
       {/* Tabelas */}
       <section className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Produtos mais pesquisados</CardTitle>
+          <CardHeader className="flex-col items-start gap-0.5">
+            <CardTitle>Produtos mais listados</CardTitle>
+            <p className="text-xs text-text-subtle">Mais presentes em listas finalizadas.</p>
           </CardHeader>
           <CardBody className="p-0">
             <Table
               columns={rankingColumns}
               data={data?.mostSearchedProducts ?? []}
               rowKey={(row) => row.product.id}
-              caption="Ranking de produtos mais pesquisados"
+              caption="Ranking de produtos mais presentes em listas finalizadas"
               emptyMessage={isLoading ? 'Carregando...' : 'Sem dados.'}
             />
           </CardBody>

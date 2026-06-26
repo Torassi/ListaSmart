@@ -50,4 +50,20 @@ describe('buildComparison', () => {
     const row = c.rows[0];
     expect(row.cells.find((x) => x.marketId === 'b')?.isCheapest).toBe(true);
   });
+
+  it('marca cobertura incompleta e exclui o mercado do "mais barato"', () => {
+    // B só tem preço para p1 (falta p2) → incompleto, mesmo sendo mais barato no parcial.
+    const partial: PriceMatrix = { p1: { a: 10, b: 1 }, p2: { a: 5 } };
+    const c = buildComparison(items, markets, partial, {});
+
+    const a = c.totals.find((t) => t.marketId === 'a');
+    const b = c.totals.find((t) => t.marketId === 'b');
+    expect(a?.complete).toBe(true);
+    expect(b?.complete).toBe(false);
+
+    // Apesar do total parcial de B ser menor, só A (completo) disputa.
+    expect(c.cheapestMarketId).toBe('a');
+    expect(c.mostExpensiveMarketId).toBe('a');
+    expect(c.savedAmount).toBe(0);
+  });
 });

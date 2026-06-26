@@ -8,24 +8,12 @@ import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { Brand } from './Brand';
 import { navItems } from './navigation';
 
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
-}
-
-function Brand() {
-  return (
-    <div className="flex items-center gap-2 px-2">
-      <span className="grid h-9 w-9 place-items-center rounded-md bg-primary text-lg font-extrabold text-white">
-        L
-      </span>
-      <span className="text-lg font-extrabold tracking-tight text-text">
-        Lista<span className="text-primary">Smart</span>
-      </span>
-    </div>
-  );
 }
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -39,15 +27,27 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors',
+              'group relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors',
               isActive
                 ? 'bg-primary-soft text-primary-active'
-                : 'text-text-muted hover:bg-bg hover:text-text',
+                : 'text-text-muted hover:bg-surface-muted hover:text-text',
             )
           }
         >
-          <Icon className="h-5 w-5" aria-hidden="true" />
-          {label}
+          {({ isActive }) => (
+            <>
+              {/* Indicador de página atual (não depende só da cor). */}
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-opacity',
+                  isActive ? 'opacity-100' : 'opacity-0',
+                )}
+              />
+              <Icon className="h-5 w-5" aria-hidden="true" />
+              {label}
+            </>
+          )}
         </NavLink>
       ))}
     </nav>
@@ -82,7 +82,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             type="button"
             aria-label="Fechar menu"
             onClick={onClose}
-            className="absolute inset-0 bg-text/40 animate-fade-in"
+            className="absolute inset-0 bg-black/60 animate-fade-in"
           />
           <aside
             className="absolute left-0 top-0 flex h-full w-72 max-w-[80vw] flex-col bg-surface shadow-card-hover animate-slide-in-right"

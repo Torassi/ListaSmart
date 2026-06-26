@@ -1,24 +1,20 @@
 /**
- * ListPage — gestão da lista de compras.
+ * ListPage — montagem da lista de compras.
  *
- * Busca + tabela de itens com controle de quantidade e preços por mercado lado a
- * lado (menor em verde, maior em vermelho). Slide-over para adicionar produto/preço
- * manualmente e avatares dos colaboradores.
+ * Durante a edição, a tela mostra APENAS os atributos do produto (nome, imagem,
+ * categoria, unidade) e a quantidade — sem preços, totais ou destaque de mercado.
+ * Os valores aparecem só na etapa explícita de comparação ("Comparar preços").
+ *
+ * Produtos são adicionados pelo catálogo (Home), não por esta tela. Quando a
+ * lista é finalizada (economia registrada no dashboard), ela fica somente-leitura.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Scale, Trash2 } from 'lucide-react';
+import { CheckCircle2, Scale, Trash2 } from 'lucide-react';
 import { Badge, Button, Card, CardBody, ProductImage, SearchInput } from '@/components';
-import { cn } from '@/lib/cn';
-import { formatCurrency } from '@/lib/currency';
-import { resolveRowPrices } from '@/lib/pricing';
-import { buildComparison } from '@/lib/comparison';
-import type { MarketTotal } from '@/types';
 import { useList, useLists } from './ListContext';
-import { useMarkets, usePriceMatrix } from './queries';
 import { QuantityStepper } from './QuantityStepper';
 import { CollaboratorsAvatars } from './CollaboratorsAvatars';
-import { AddProductSlideOver } from './AddProductSlideOver';
 
 function normalize(text: string): string {
   return text
@@ -29,15 +25,8 @@ function normalize(text: string): string {
 
 export function ListPage() {
   const { items, setQuantity, removeItem } = useList();
-  const { activeName, activeCollaborators } = useLists();
-  const marketsQuery = useMarkets();
-  const matrixQuery = usePriceMatrix();
+  const { activeName, activeCollaborators, activeFinalized } = useLists();
   const [query, setQuery] = useState('');
-  const [slideOpen, setSlideOpen] = useState(false);
-
-  const markets = useMemo(() => marketsQuery.data ?? [], [marketsQuery.data]);
-  // Matriz de preços vinda da API (inclui preços manuais já registrados).
-  const matrix = useMemo(() => matrixQuery.data ?? {}, [matrixQuery.data]);
 
   // Busca local nos itens da lista por nome, categoria ou código de barras.
   const filtered = useMemo(() => {
@@ -51,40 +40,35 @@ export function ListPage() {
     );
   }, [items, query]);
 
-  // Totais + cobertura por mercado usando o MESMO helper da comparação
-  // (`buildComparison`): só mercados com preço para TODOS os itens (cobertura
-  // completa) disputam o "mais barato". Evita destacar um total parcial.
-  const comparison = useMemo(
-    () => buildComparison(items, markets, matrix, {}),
-    [items, markets, matrix],
-  );
-  const totalsByMarket = useMemo(
-    () => new Map<string, MarketTotal>(comparison.totals.map((t) => [t.marketId, t])),
-    [comparison],
-  );
-  const hasAnyTotal = comparison.totals.some((t) => t.total > 0);
-
   return (
     <div className="flex flex-col gap-6">
       {/* Cabeçalho */}
       <header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-text">{activeName}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold tracking-tight text-text">{activeName}</h1>
+            {activeFinalized && (
+              <Badge tone="primary" className="gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Finalizada
+              </Badge>
+            )}
+          </div>
           <p className="mt-1 text-sm text-text-muted">
-            {items.length} {items.length === 1 ? 'item' : 'itens'} · compare os preços por mercado.
+            {activeFinalized
+              ? 'Lista finalizada — entrou no dashboard e não pode mais ser editada.'
+              : `${items.length} ${items.length === 1 ? 'item' : 'itens'} · adicione produtos pelo catálogo. Os preços aparecem só ao comparar.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <CollaboratorsAvatars users={activeCollaborators} />
-          <Button
-            variant="secondary"
-            onClick={() => setSlideOpen(true)}
-            leftIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
-          >
-            Adicionar produto
-          </Button>
           <Link to="/comparar">
-            <Button leftIcon={<Scale className="h-4 w-4" aria-hidden="true" />}>Comparar preços</Button>
+            <Button
+              disabled={items.length === 0}
+              leftIcon={<Scale className="h-4 w-4" aria-hidden="true" />}
+            >
+              {activeFinalized ? 'Ver comparação' : 'Comparar preços'}
+            </Button>
           </Link>
         </div>
       </header>
@@ -99,70 +83,61 @@ export function ListPage() {
 
       {/* Conteúdo */}
       {items.length === 0 ? (
-        <EmptyState onAdd={() => setSlideOpen(true)} />
+        <EmptyState />
       ) : (
         <Card>
           <CardBody className="overflow-x-auto p-0">
             <table className="w-full border-collapse text-sm">
-              <caption className="sr-only">Itens da lista com preços por mercado</caption>
+              <caption className="sr-only">Itens da lista de compras</caption>
               <thead>
                 <tr className="border-b border-border">
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-subtle">
                     Produto
                   </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-subtle">
+                    Unidade
+                  </th>
                   <th scope="col" className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-text-subtle">
                     Qtd.
                   </th>
-                  {markets.map((m) => (
-                    <th key={m.id} scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-text-subtle">
-                      {m.name}
+                  {!activeFinalized && (
+                    <th scope="col" className="px-4 py-3">
+                      <span className="sr-only">Ações</span>
                     </th>
-                  ))}
-                  <th scope="col" className="px-4 py-3">
-                    <span className="sr-only">Ações</span>
-                  </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((item) => {
-                  const cells = resolveRowPrices(item.product.id, markets, matrix);
-                  return (
-                    <tr key={item.product.id} className="border-b border-border last:border-0">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <ProductImage
-                            src={item.product.imageUrl}
-                            alt={item.product.name}
-                            className="h-10 w-10 shrink-0 rounded-md"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-text">{item.product.name}</p>
-                            <Badge tone="secondary" className="mt-0.5">
-                              {item.product.category}
-                            </Badge>
-                          </div>
+                {filtered.map((item) => (
+                  <tr key={item.product.id} className="border-b border-border last:border-0">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <ProductImage
+                          src={item.product.imageUrl}
+                          alt={item.product.name}
+                          className="h-10 w-10 shrink-0 rounded-md"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-text">{item.product.name}</p>
+                          <Badge tone="secondary" className="mt-0.5">
+                            {item.product.category}
+                          </Badge>
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-left text-text-muted">{item.product.unit}</td>
+                    <td className="px-4 py-3 text-center">
+                      {activeFinalized ? (
+                        <span className="font-semibold text-text">{item.quantity}</span>
+                      ) : (
                         <QuantityStepper
                           value={item.quantity}
                           onChange={(q) => setQuantity(item.product.id, q)}
                           label={item.product.name}
                         />
-                      </td>
-                      {cells.map((cell) => (
-                        <td
-                          key={cell.marketId}
-                          className={cn(
-                            'money px-4 py-3 text-right font-semibold',
-                            cell.isCheapest && 'bg-primary-soft text-primary-active',
-                            cell.isMostExpensive && 'bg-danger/10 text-danger',
-                            !cell.isCheapest && !cell.isMostExpensive && 'text-text',
-                          )}
-                        >
-                          {cell.value != null ? formatCurrency(cell.value) : '—'}
-                        </td>
-                      ))}
+                      )}
+                    </td>
+                    {!activeFinalized && (
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
@@ -173,80 +148,29 @@ export function ListPage() {
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </button>
                       </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              {hasAnyTotal && (
-                <tfoot>
-                  <tr className="border-t-2 border-border bg-bg/50">
-                    <td className="px-4 py-3 font-bold text-text" colSpan={2}>
-                      Total por mercado
-                    </td>
-                    {markets.map((m) => {
-                      const entry = totalsByMarket.get(m.id);
-                      const total = entry?.total ?? 0;
-                      const incomplete = !!entry && !entry.complete && total > 0;
-                      // Só o mercado de cobertura COMPLETA é destacado como mais barato.
-                      const isCheapest = m.id === comparison.cheapestMarketId;
-                      return (
-                        <td
-                          key={m.id}
-                          title={
-                            incomplete
-                              ? 'Sem preço para todos os itens — total parcial'
-                              : undefined
-                          }
-                          className={cn(
-                            'money px-4 py-3 text-right font-extrabold',
-                            isCheapest ? 'text-primary-active' : 'text-text',
-                            incomplete && 'text-text-subtle',
-                          )}
-                        >
-                          {total > 0 ? formatCurrency(total) : '—'}
-                          {incomplete && (
-                            <span className="ml-1 align-super text-[10px]" aria-hidden="true">
-                              *
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td />
+                    )}
                   </tr>
-                  {comparison.totals.some((t) => !t.complete && t.total > 0) && (
-                    <tr>
-                      <td colSpan={markets.length + 3} className="px-4 pb-3 text-xs text-text-subtle">
-                        * Mercado sem preço para todos os itens — não entra na escolha do mais barato.
-                      </td>
-                    </tr>
-                  )}
-                </tfoot>
-              )}
+                ))}
+              </tbody>
             </table>
           </CardBody>
         </Card>
       )}
-
-      <AddProductSlideOver open={slideOpen} onClose={() => setSlideOpen(false)} markets={markets} />
     </div>
   );
 }
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+function EmptyState() {
   return (
     <Card className="p-10 text-center">
       <p className="text-base font-semibold text-text">Sua lista está vazia</p>
       <p className="mx-auto mt-1 max-w-sm text-sm text-text-muted">
-        Adicione produtos pelo catálogo na Home ou cadastre um item manualmente com o preço de um mercado.
+        Adicione produtos pelo catálogo na Home para montar sua lista de compras.
       </p>
-      <div className="mt-6 flex justify-center gap-2">
+      <div className="mt-6 flex justify-center">
         <Link to="/">
           <Button variant="secondary">Ir ao catálogo</Button>
         </Link>
-        <Button onClick={onAdd} leftIcon={<Plus className="h-4 w-4" aria-hidden="true" />}>
-          Adicionar produto
-        </Button>
       </div>
     </Card>
   );

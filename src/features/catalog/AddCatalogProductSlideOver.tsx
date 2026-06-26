@@ -88,7 +88,7 @@ export function AddCatalogProductSlideOver({ open, onClose, markets }: AddCatalo
       open={open}
       onClose={close}
       title="Adicionar ao catálogo"
-      description="Cadastre um novo produto e um preço inicial em um mercado."
+      description="Cadastre um produto e seu preço em um mercado. Se o produto já existir, reaproveitamos o cadastro e apenas atualizamos o preço."
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={close}>
@@ -169,7 +169,12 @@ export function AddCatalogProductSlideOver({ open, onClose, markets }: AddCatalo
           )}
         </Field>
 
-        <Field label="Unidade" error={errors.unit?.message} hint="Ex.: 1 kg, 500 g, unidade." required>
+        <Field
+          label="Unidade"
+          error={errors.unit?.message}
+          hint="Ex.: 1 kg, 500 g, unidade. Mesmo nome com unidades diferentes são produtos distintos."
+          required
+        >
           {({ id, describedBy }) => (
             <Input
               id={id}
@@ -181,7 +186,11 @@ export function AddCatalogProductSlideOver({ open, onClose, markets }: AddCatalo
           )}
         </Field>
 
-        <Field label="Código de barras" error={errors.barcode?.message} hint="Opcional (8 a 14 dígitos).">
+        <Field
+          label="Código de barras"
+          error={errors.barcode?.message}
+          hint="Opcional (8 a 14 dígitos). Quando informado, identifica o produto e evita duplicatas."
+        >
           {({ id, describedBy }) => (
             <Input
               id={id}

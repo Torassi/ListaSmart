@@ -16,15 +16,15 @@ describe('analytics (integrado à API)', () => {
     expect(data.cheapestMarketByList).toBe('—');
   });
 
-  it('agrega eventos de busca no ranking', async () => {
+  it('agrega categorias dos eventos de busca (sem alimentar o ranking de produtos)', async () => {
     seedSession();
-    await registerSearchEvent({ productId: 'p1' });
     await registerSearchEvent({ productId: 'p1' });
     await registerSearchEvent({ category: 'Hortifrúti' });
 
     const data = await getAnalytics();
-    expect(data.mostSearchedProducts[0].product.id).toBe('p1');
-    expect(data.mostSearchedProducts[0].searches).toBe(2);
+    // Categorias vêm de buscas…
     expect(data.categoryShares.find((c) => c.category === 'Hortifrúti')?.searches).toBe(1);
+    // …mas "produtos mais listados" depende de listas finalizadas, não de buscas.
+    expect(data.mostSearchedProducts).toEqual([]);
   });
 });

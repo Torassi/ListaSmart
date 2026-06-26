@@ -38,7 +38,9 @@ describe('troca de usuário (isolamento de cache)', () => {
     await act(async () => {
       await result.current.auth.signup(account('alice'));
     });
-    act(() => result.current.lists.createList('Lista da Alice'));
+    await act(async () => {
+      await result.current.lists.createList('Lista da Alice');
+    });
     await waitFor(() => expect(result.current.lists.lists).toHaveLength(1));
 
     // Logout limpa o cache privado.

@@ -7,7 +7,7 @@
    ============================================================ */
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
   }
 
   html {
@@ -22,6 +22,13 @@
     min-height: 100vh;
   }
 
+  /* Títulos com tracking levemente fechado para um ar mais editorial/produto. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.01em;
+  }
+
   /* Foco visível e consistente para navegação por teclado (acessibilidade). */
   :focus-visible {
     @apply outline-none ring-2 ring-secondary ring-offset-2 ring-offset-bg;
@@ -30,6 +37,19 @@
   /* Valores monetários sempre com largura tabular para alinhar colunas. */
   .money {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Acessibilidade: respeita quem prefere menos movimento — desliga animações,
+     transições e rolagem suave (mantém o foco/estados, só remove o movimento). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -43,9 +63,22 @@
   }
 
   .input-base {
-    @apply w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text
+    @apply min-h-11 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text
       placeholder:text-text-subtle focus:border-secondary focus:outline-none
       focus:ring-2 focus:ring-secondary/40 disabled:cursor-not-allowed disabled:bg-bg;
+  }
+
+  /* Identidade ListaSmart: gradiente de marca (verde economia → azul confiança). */
+  .brand-gradient {
+    @apply bg-gradient-to-br from-primary to-secondary;
+  }
+  .text-brand-gradient {
+    @apply bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
+  }
+
+  /* Alvo de toque confortável (>= 44px) para ações em mobile. */
+  .tap-target {
+    @apply min-h-11 min-w-11;
   }
 
   /* Esconde a scrollbar mantendo a rolagem (usado em trilhas horizontais). */

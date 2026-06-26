@@ -12,7 +12,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -26,20 +26,22 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-md font-semibold transition-colors ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 ' +
-  'focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex items-center justify-center gap-2 rounded-md font-semibold transition-all ' +
+  'active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary ' +
+  'focus-visible:ring-offset-2 focus-visible:ring-offset-bg ' +
+  'disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none disabled:active:scale-100';
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-hover active:bg-primary-active',
-  secondary: 'bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-active',
+  primary: 'bg-primary text-white shadow-card hover:bg-primary-hover hover:shadow-card-hover active:bg-primary-active',
+  secondary: 'bg-secondary text-white shadow-card hover:bg-secondary-hover hover:shadow-card-hover active:bg-secondary-active',
+  accent: 'bg-accent text-white shadow-card hover:bg-accent-hover hover:shadow-card-hover active:bg-accent-active',
   ghost: 'bg-transparent text-text-muted hover:bg-bg active:bg-border',
-  danger: 'bg-danger text-white hover:brightness-95 active:brightness-90',
+  danger: 'bg-danger text-white shadow-card hover:brightness-95 active:brightness-90',
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-sm',
+  sm: 'h-9 px-3.5 text-sm',
+  md: 'h-11 px-5 text-sm',
   lg: 'h-12 px-6 text-base',
 };
 

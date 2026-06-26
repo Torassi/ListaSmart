@@ -11,6 +11,7 @@ env/
 # SQLite local database
 *.db
 *.sqlite3
+*.db.bak*
 
 # Pytest / tooling
 .pytest_cache/

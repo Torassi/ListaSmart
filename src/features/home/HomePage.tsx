@@ -109,8 +109,8 @@ export function HomePage() {
         <div className="flex flex-wrap gap-2">
           <Button
             leftIcon={<ListPlus className="h-4 w-4" aria-hidden="true" />}
-            onClick={() => {
-              createList('Nova lista');
+            onClick={async () => {
+              await createList('Nova lista');
               navigate('/lista');
             }}
           >

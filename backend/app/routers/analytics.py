@@ -22,9 +22,10 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 @router.get("", response_model=AnalyticsData)
 def get_analytics(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ) -> AnalyticsData:
-    return build_analytics(db, user)
+    # Requer autenticação, mas o dashboard é GLOBAL (dados de todos os usuários).
+    return build_analytics(db)
 
 
 @router.post("/search-events", status_code=status.HTTP_201_CREATED)

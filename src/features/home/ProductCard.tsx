@@ -1,11 +1,15 @@
 /**
- * ProductCard — card do catálogo: imagem, categoria, nome, menor preço e
- * botão "Adicionar à lista" com feedback imediato (toast + contador no topbar).
+ * ProductCard — card do catálogo: imagem, categoria, nome, unidade e botão
+ * "Adicionar à lista" com feedback imediato (toast + contador no topbar).
+ *
+ * NÃO exibe preço: durante a montagem da lista o usuário escolhe pelos atributos
+ * do produto (nome, imagem, categoria, unidade). Os valores só aparecem na etapa
+ * explícita de comparação (`ComparePage`). O tipo `ProductWithPrice` é mantido
+ * (o `lowestPrice` continua vindo da API), apenas não é renderizado aqui.
  */
 import { useState } from 'react';
 import { Check, Plus } from 'lucide-react';
 import { Badge, Button, Card, ProductImage } from '@/components';
-import { formatCurrency } from '@/lib/currency';
 import { useToast } from '@/hooks/useToast';
 import { useList } from '@/features/list/ListContext';
 import { registerSearchEvent } from '@/services';
@@ -31,39 +35,33 @@ export function ProductCard({ product }: ProductCardProps) {
   }
 
   return (
-    <Card interactive className="flex flex-col overflow-hidden">
-      <div className="relative">
-        <ProductImage src={product.imageUrl} alt={product.name} className="h-36 w-full" />
-        <Badge tone="secondary" className="absolute left-2 top-2">
+    <Card interactive className="group flex flex-col overflow-hidden">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-surface-muted">
+        <ProductImage
+          src={product.imageUrl}
+          alt={product.name}
+          className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+        />
+        <Badge
+          tone="neutral"
+          className="absolute left-2 top-2 bg-surface/90 shadow-card ring-0 backdrop-blur"
+        >
           {product.category}
         </Badge>
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        <h3 className="font-semibold leading-snug text-text">{product.name}</h3>
-        <p className="text-xs text-text-subtle">
-          {product.unit}
-          {product.brand ? ` · ${product.brand}` : ''}
-        </p>
-
-        <div className="mt-3 flex items-end justify-between gap-2">
-          <div>
-            {product.lowestPrice != null ? (
-              <>
-                <p className="text-[11px] text-text-subtle">a partir de</p>
-                <p className="money text-lg font-extrabold text-primary-active">
-                  {formatCurrency(product.lowestPrice)}
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-text-subtle">Sem preço cadastrado</p>
-            )}
-          </div>
-        </div>
+        {product.brand && (
+          <p className="text-[11px] font-bold uppercase tracking-wide text-secondary-active">
+            {product.brand}
+          </p>
+        )}
+        <h3 className="line-clamp-2 font-semibold leading-snug text-text">{product.name}</h3>
+        <p className="mt-0.5 text-xs text-text-subtle">{product.unit}</p>
 
         <Button
           onClick={handleAdd}
-          variant={justAdded ? 'secondary' : 'primary'}
+          variant={justAdded ? 'primary' : 'secondary'}
           size="sm"
           className="mt-4 w-full"
           leftIcon={

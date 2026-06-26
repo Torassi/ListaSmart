@@ -1,10 +1,14 @@
 """Agregação dos indicadores do dashboard de inteligência (dados reais).
 
+O dashboard é GLOBAL: agrega os dados de TODOS os usuários (não filtra pelo
+usuário logado), pois reflete a inteligência coletiva da plataforma — listas,
+produtos e comparações cadastrados por toda a base.
+
 Fontes:
 - preços (`prices`): contagem de preços manuais e oportunidades de economia;
 - eventos de busca (`search_events`): produtos/categorias mais pesquisados;
 - snapshots de comparação (`comparison_snapshots`): competitividade dos
-  mercados, economia média e mercado campeão do usuário.
+  mercados, economia média e mercado campeão — somando TODOS os usuários.
 
 Nada é fictício: quando não há dados, as coleções voltam vazias e os números
 voltam zerados.
@@ -16,11 +20,12 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     ComparisonSnapshot,
+    ListItem,
     Market,
     Price,
     Product,
     SearchEvent,
-    User,
+    ShoppingList,
 )
 from app.schemas.analytics import (
     AnalyticsData,
@@ -40,7 +45,7 @@ def _round2(value: float) -> float:
     return round(value + 1e-9, 2)
 
 
-def build_analytics(db: Session, user: User) -> AnalyticsData:
+def build_analytics(db: Session) -> AnalyticsData:
     markets = db.execute(select(Market)).scalars().all()
     market_name = {m.id: m.name for m in markets}
 
@@ -51,15 +56,15 @@ def build_analytics(db: Session, user: User) -> AnalyticsData:
     )
 
     opportunities = _opportunities(db, market_name)
-    competitiveness = _market_competitiveness(db, user, markets)
+    competitiveness = _market_competitiveness(db, markets)
     cheapest_market_by_list = (
         competitiveness[0].market.name
         if competitiveness and competitiveness[0].cheapest_wins > 0
         else "—"
     )
-    avg_savings = _avg_savings(db, user)
+    avg_savings = _avg_savings(db)
     category_shares = _category_shares(db)
-    most_searched = _most_searched_products(db)
+    most_searched = _top_products_in_finalized_lists(db)
 
     return AnalyticsData(
         cheapest_market_by_list=cheapest_market_by_list,
@@ -111,15 +116,12 @@ def _opportunities(
 
 
 def _market_competitiveness(
-    db: Session, user: User, markets: list[Market]
+    db: Session, markets: list[Market]
 ) -> list[MarketCompetitiveness]:
-    """Vitórias (mercado mais barato) por mercado nos snapshots do usuário."""
+    """Vitórias (mercado mais barato) por mercado em TODOS os snapshots (global)."""
     rows = db.execute(
         select(ComparisonSnapshot.cheapest_market_id, func.count())
-        .where(
-            ComparisonSnapshot.user_id == user.id,
-            ComparisonSnapshot.cheapest_market_id.is_not(None),
-        )
+        .where(ComparisonSnapshot.cheapest_market_id.is_not(None))
         .group_by(ComparisonSnapshot.cheapest_market_id)
     ).all()
     wins = {market_id: count for market_id, count in rows}
@@ -134,12 +136,10 @@ def _market_competitiveness(
     return competitiveness
 
 
-def _avg_savings(db: Session, user: User) -> float:
-    """Média de economia registrada (snapshots) do usuário."""
+def _avg_savings(db: Session) -> float:
+    """Média de economia registrada em TODOS os snapshots (global)."""
     avg = db.execute(
-        select(func.avg(ComparisonSnapshot.saved_amount)).where(
-            ComparisonSnapshot.user_id == user.id
-        )
+        select(func.avg(ComparisonSnapshot.saved_amount))
     ).scalar_one_or_none()
     return _round2(avg) if avg is not None else 0.0
 
@@ -154,11 +154,19 @@ def _category_shares(db: Session) -> list[CategoryShare]:
     return [CategoryShare(category=cat, searches=count) for cat, count in rows]
 
 
-def _most_searched_products(db: Session) -> list[RankedProduct]:
+def _top_products_in_finalized_lists(db: Session) -> list[RankedProduct]:
+    """Produtos mais presentes em listas FINALIZADAS (global, todos os usuários).
+
+    Conta em quantas listas finalizadas cada produto aparece (uma por lista — o
+    par (lista, produto) é único). Reflete o que as pessoas de fato listaram e
+    finalizaram, em vez de eventos de busca. O campo `searches` carrega essa
+    contagem (nome mantido por compatibilidade do contrato).
+    """
     rows = db.execute(
-        select(SearchEvent.product_id, func.count())
-        .where(SearchEvent.product_id.is_not(None))
-        .group_by(SearchEvent.product_id)
+        select(ListItem.product_id, func.count())
+        .join(ShoppingList, ShoppingList.id == ListItem.list_id)
+        .where(ShoppingList.finalized.is_(True))
+        .group_by(ListItem.product_id)
         .order_by(func.count().desc())
         .limit(RANKING_LIMIT)
     ).all()

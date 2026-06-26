@@ -3,7 +3,7 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ListChecks, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Check, CheckCircle2, ListChecks, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { Badge, Button, Card, CardBody, Input } from '@/components';
 import { useToast } from '@/hooks/useToast';
 import { useLists } from './ListContext';
@@ -15,9 +15,9 @@ export function ListsPage() {
   const navigate = useNavigate();
   const [newName, setNewName] = useState('');
 
-  function handleCreate() {
+  async function handleCreate() {
     const name = newName.trim() || 'Nova lista';
-    createList(name);
+    await createList(name);
     setNewName('');
     toast(`Lista "${name}" criada`, 'success');
     navigate('/lista');
@@ -60,7 +60,7 @@ export function ListsPage() {
             key={list.id}
             list={list}
             isActive={list.id === activeId}
-            canDelete={lists.length > 1}
+            canDelete={lists.length > 1 && !list.finalized}
             onOpen={() => handleOpen(list.id)}
             onRename={(name) => renameList(list.id, name)}
             onDelete={() => {
@@ -100,7 +100,15 @@ function ListCard({ list, isActive, canDelete, onOpen, onRename, onDelete }: Lis
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary-soft text-primary-active">
           <ListChecks className="h-5 w-5" aria-hidden="true" />
         </span>
-        {isActive && <Badge tone="primary">Ativa</Badge>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {list.finalized && (
+            <Badge tone="primary" className="gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Finalizada
+            </Badge>
+          )}
+          {isActive && <Badge tone="secondary">Ativa</Badge>}
+        </div>
       </div>
 
       {editing ? (
@@ -160,6 +168,7 @@ function ListCard({ list, isActive, canDelete, onOpen, onRename, onDelete }: Lis
           onClick={onDelete}
           disabled={!canDelete}
           aria-label={`Excluir ${list.name}`}
+          title={list.finalized ? 'Lista finalizada não pode ser excluída' : undefined}
           className="hover:text-danger"
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" />

@@ -40,6 +40,7 @@ export interface ListSummary {
   id: string;
   name: string;
   itemCount: number;
+  finalized: boolean;
   updatedAt: string;
 }
 
@@ -47,9 +48,13 @@ interface ListsContextValue {
   lists: ListSummary[];
   activeId: string;
   activeName: string;
+  /** True se a lista ativa foi finalizada (read-only, entrou no dashboard). */
+  activeFinalized: boolean;
   /** Colaboradores da lista ativa (o dono é sempre o primeiro). */
   activeCollaborators: User[];
-  createList: (name: string) => void;
+  /** Cria uma lista e a deixa ATIVA. Awaitable: navegue só após resolver, para
+   *  já exibir a lista nova (vazia) em vez da anterior. */
+  createList: (name: string) => Promise<void>;
   renameList: (id: string, name: string) => void;
   deleteList: (id: string) => void;
   selectList: (id: string) => void;
@@ -124,15 +129,29 @@ export function ListProvider({ children }: { children: ReactNode }) {
     return current.find((l) => l.id === activeIdRef.current) ?? current[0];
   }, [qc, lists]);
 
-  /** Garante uma lista ativa, criando uma padrão se ainda não houver nenhuma. */
+  /** Garante uma lista ativa EM EDIÇÃO.
+   *
+   * Reaproveita a lista ativa só se ainda não foi finalizada. Se não houver
+   * lista, OU a ativa estiver finalizada (entrou no dashboard, read-only),
+   * inicia automaticamente uma nova lista — sem o usuário precisar criá-la.
+   */
   const ensureActiveList = useCallback(async (): Promise<ShoppingList> => {
     const existing = resolveActive();
-    if (existing) return existing;
-    const created = await listsApi.createList('Minha lista');
+    if (existing && !existing.finalized) return existing;
+
+    const created = await listsApi.createList('Nova lista');
+    activeIdRef.current = created.id;
     setActiveId(created.id);
-    await invalidate();
+    // Insere otimisticamente no cache para evitar duplicar listas em adições
+    // rápidas em sequência (antes do refetch reconciliar).
+    qc.setQueryData<ShoppingList[]>(listsKeyRef.current, (old) =>
+      old ? [created, ...old] : [created],
+    );
+    if (existing?.finalized) {
+      toast('Lista anterior finalizada — iniciamos uma nova lista.', 'info');
+    }
     return created;
-  }, [resolveActive, invalidate]);
+  }, [resolveActive, qc, toast]);
 
   /* ----- Ações da lista ativa ----- */
   const addItem = useCallback(
@@ -207,15 +226,25 @@ export function ListProvider({ children }: { children: ReactNode }) {
   }, [run, resolveActive, invalidateListAndComparison]);
 
   /* ----- Ações da coleção ----- */
+  // Awaitable: deixa a lista nova ATIVA antes de resolver, para a UI navegar e
+  // já exibir a lista vazia (evita mostrar a anterior/finalizada e cliques
+  // repetidos que duplicavam listas).
   const createList = useCallback(
-    (name: string) => {
-      run(async () => {
+    async (name: string): Promise<void> => {
+      try {
         const created = await listsApi.createList(name.trim() || 'Nova lista');
+        activeIdRef.current = created.id;
         setActiveId(created.id);
+        // Insere otimisticamente no cache para a lista ativa já refletir a nova.
+        qc.setQueryData<ShoppingList[]>(listsKeyRef.current, (old) =>
+          old ? [created, ...old] : [created],
+        );
         await invalidate();
-      });
+      } catch {
+        toast('Não foi possível criar a lista.', 'error');
+      }
     },
-    [run, invalidate],
+    [invalidate, qc, toast],
   );
 
   const renameList = useCallback(
@@ -260,10 +289,12 @@ export function ListProvider({ children }: { children: ReactNode }) {
         id: l.id,
         name: l.name,
         itemCount: l.items.reduce((sum, i) => sum + i.quantity, 0),
+        finalized: l.finalized,
         updatedAt: l.updatedAt,
       })),
       activeId: active?.id ?? '',
       activeName: active?.name ?? '',
+      activeFinalized: active?.finalized ?? false,
       activeCollaborators: active?.collaborators ?? [],
       createList,
       renameList,

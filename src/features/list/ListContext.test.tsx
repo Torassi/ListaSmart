@@ -41,7 +41,9 @@ describe('ListContext (integrado à API)', () => {
     seedSession();
     const { result } = setup();
 
-    act(() => result.current.lists.createList('Compra'));
+    await act(async () => {
+      await result.current.lists.createList('Compra');
+    });
     await waitFor(() => expect(result.current.lists.activeId).toBeTruthy());
 
     act(() => result.current.list.addItem(product));
@@ -55,7 +57,9 @@ describe('ListContext (integrado à API)', () => {
     seedSession();
     const { result } = setup();
 
-    act(() => result.current.lists.createList('Compra'));
+    await act(async () => {
+      await result.current.lists.createList('Compra');
+    });
     await waitFor(() => expect(result.current.lists.activeId).toBeTruthy());
 
     act(() => result.current.list.addItem(product));
@@ -69,7 +73,9 @@ describe('ListContext (integrado à API)', () => {
     seedSession();
     const { result } = setup();
 
-    act(() => result.current.lists.createList('Compra'));
+    await act(async () => {
+      await result.current.lists.createList('Compra');
+    });
     // Aguarda a lista realmente carregar (sessão reidratada + fetch concluído),
     // evitando corrida com a criação otimista.
     await waitFor(() => expect(result.current.lists.lists).toHaveLength(1));

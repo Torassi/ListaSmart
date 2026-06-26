@@ -34,7 +34,7 @@ export interface Product {
 
 export interface Market {
   id: Id;
-  name: string; // Giassi, Angeloni, Bistek, Comper, ...
+  name: string; // Giassi, Angeloni, Bistek, Fort Atacadista, ...
   /** Cor de marca para realces sutis na UI (token visual, não preço). */
   brandColor?: string;
   logoUrl?: string;
@@ -68,6 +68,8 @@ export interface ShoppingList {
   name: string;
   items: ListItem[];
   collaborators: User[];
+  /** Lista finalizada: entrou no dashboard; não pode mais ser editada/excluída. */
+  finalized: boolean;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 }

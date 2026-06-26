@@ -311,6 +311,152 @@ def test_create_product_with_initial_price(auth_client: TestClient) -> None:
     assert matrix[pid]["giassi"] == 12.5
 
 
+def test_create_product_dedup_reuses_id_across_markets(auth_client: TestClient) -> None:
+    """Cadastrar o mesmo produto (caixa/espaços diferentes) reutiliza o id e só
+    adiciona/atualiza preços, sem duplicar o catálogo."""
+    # (1) Primeiro cadastro de "Arroz Branco" no mercado A (giassi).
+    first = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Arroz Branco",
+            "category": "Mercearia",
+            "unit": "5 kg",
+            "marketId": "giassi",
+            "price": 25.00,
+        },
+    )
+    assert first.status_code == 201, first.text
+    pid = first.json()["id"]
+    assert first.json()["lowestPrice"] == 25.00
+
+    # (2) Segundo cadastro com diferenças de caixa/espaços no mercado B (bistek).
+    second = auth_client.post(
+        "/api/products",
+        json={
+            "name": "  arroz   branco ",
+            "category": "Mercearia",
+            "unit": " 5 KG ",
+            "marketId": "bistek",
+            "price": 22.00,
+        },
+    )
+    assert second.status_code == 201, second.text
+    # Mesmo id reutilizado e menor preço entre os mercados.
+    assert second.json()["id"] == pid
+    assert second.json()["lowestPrice"] == 22.00
+
+    # (3) Apenas um produto "Arroz Branco" no catálogo (p1/p2 do seed continuam).
+    catalog = auth_client.get("/api/products", params={"q": "Arroz Branco"}).json()
+    assert len(catalog) == 1 and catalog[0]["id"] == pid
+
+    # (4) Dois preços associados ao mesmo product_id.
+    matrix = auth_client.get("/api/prices/matrix").json()
+    assert matrix[pid] == {"giassi": 25.00, "bistek": 22.00}
+
+    # (5) Novo cadastro no mercado A atualiza o preço existente (não duplica).
+    update = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Arroz Branco",
+            "category": "Mercearia",
+            "unit": "5 kg",
+            "marketId": "giassi",
+            "price": 19.90,
+        },
+    )
+    assert update.status_code == 201, update.text
+    assert update.json()["id"] == pid
+    assert update.json()["lowestPrice"] == 19.90  # menor agora é o de giassi
+    matrix = auth_client.get("/api/prices/matrix").json()
+    assert matrix[pid] == {"giassi": 19.90, "bistek": 22.00}
+
+
+def test_create_product_different_units_not_merged(auth_client: TestClient) -> None:
+    """(6) Mesmo nome/categoria mas unidades diferentes são produtos distintos."""
+    one_kg = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Arroz",
+            "category": "Mercearia",
+            "unit": "1 kg",
+            "marketId": "giassi",
+            "price": 6.0,
+        },
+    )
+    five_kg = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Arroz",
+            "category": "Mercearia",
+            "unit": "5 kg",
+            "marketId": "giassi",
+            "price": 25.0,
+        },
+    )
+    assert one_kg.status_code == 201 and five_kg.status_code == 201
+    assert one_kg.json()["id"] != five_kg.json()["id"]
+    catalog = auth_client.get("/api/products", params={"q": "Arroz"}).json()
+    assert len({p["id"] for p in catalog}) == 2
+
+
+def test_create_product_barcode_conflict_same_identity(auth_client: TestClient) -> None:
+    """(7) Mesmo produto (nome/unidade/categoria) cadastrado depois com OUTRO
+    código de barras: conflito claro, sem mesclar."""
+    auth_client.post(
+        "/api/products",
+        json={
+            "name": "Feijão Carioca",
+            "category": "Mercearia",
+            "unit": "1 kg",
+            "barcode": "7890000000001",
+            "marketId": "giassi",
+            "price": 8.0,
+        },
+    )
+    res = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Feijão Carioca",
+            "category": "Mercearia",
+            "unit": "1 kg",
+            "barcode": "7890000000002",  # código divergente
+            "marketId": "bistek",
+            "price": 7.5,
+        },
+    )
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "barcode_conflict"
+
+
+def test_create_product_same_barcode_reuses(auth_client: TestClient) -> None:
+    """Reenvio com o mesmo código de barras e identidade igual reutiliza o produto."""
+    first = auth_client.post(
+        "/api/products",
+        json={
+            "name": "Açúcar Refinado",
+            "category": "Mercearia",
+            "unit": "1 kg",
+            "barcode": "7890000000010",
+            "marketId": "giassi",
+            "price": 4.5,
+        },
+    )
+    second = auth_client.post(
+        "/api/products",
+        json={
+            "name": "açúcar refinado",
+            "category": "Mercearia",
+            "unit": "1 kg",
+            "barcode": "7890000000010",
+            "marketId": "bistek",
+            "price": 4.0,
+        },
+    )
+    assert first.status_code == 201 and second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+    assert second.json()["lowestPrice"] == 4.0
+
+
 def test_create_product_duplicate_barcode(auth_client: TestClient) -> None:
     # 7891000000000 é o código de barras de p1 (ver conftest).
     res = auth_client.post(

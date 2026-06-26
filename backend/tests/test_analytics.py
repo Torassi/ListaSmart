@@ -100,16 +100,29 @@ def test_price_opportunities_sorted_by_diff(auth_client: TestClient) -> None:
     assert ops[0]["diff"] >= ops[1]["diff"]
 
 
-def test_search_events_aggregation(auth_client: TestClient) -> None:
-    auth_client.post("/api/analytics/search-events", json={"productId": "p1"})
+def test_category_search_aggregation(auth_client: TestClient) -> None:
+    """Categorias mais pesquisadas vêm dos eventos de busca; o ranking de PRODUTOS
+    NÃO depende de buscas (conta listas finalizadas — ver teste dedicado)."""
     auth_client.post("/api/analytics/search-events", json={"productId": "p1"})
     auth_client.post("/api/analytics/search-events", json={"category": "Hortifrúti"})
 
     data = auth_client.get("/api/analytics").json()
-    top = data["mostSearchedProducts"]
-    assert top[0]["product"]["id"] == "p1" and top[0]["searches"] == 2
     cats = {c["category"]: c["searches"] for c in data["categoryShares"]}
     assert cats["Hortifrúti"] == 1
+    # Eventos de busca não alimentam mais "produtos mais listados".
+    assert data["mostSearchedProducts"] == []
+
+
+def test_most_listed_products_counts_finalized_lists(auth_client: TestClient) -> None:
+    """O ranking de produtos conta quantas listas FINALIZADAS contêm cada item."""
+    list_id = _list_with_full_coverage(auth_client)  # adiciona p1 e p2
+    # Antes de finalizar, não conta.
+    assert auth_client.get("/api/analytics").json()["mostSearchedProducts"] == []
+
+    auth_client.post(f"/api/lists/{list_id}/comparison-snapshots")  # finaliza
+    ranked = {r["product"]["id"]: r["searches"] for r in auth_client.get("/api/analytics").json()["mostSearchedProducts"]}
+    assert ranked.get("p1") == 1
+    assert ranked.get("p2") == 1
 
 
 def test_search_event_requires_auth(client: TestClient) -> None:
@@ -158,11 +171,33 @@ def test_snapshot_requires_complete_coverage(auth_client: TestClient) -> None:
     assert res.json()["error"]["code"] == "incomplete_coverage"
 
 
-def test_snapshot_dedupe(auth_client: TestClient) -> None:
+def test_snapshot_once_per_list(auth_client: TestClient) -> None:
+    """Registrar economia/finalizar é idempotente por lista: um único snapshot."""
     list_id = _list_with_full_coverage(auth_client)
     first = auth_client.post(f"/api/lists/{list_id}/comparison-snapshots").json()
     second = auth_client.post(f"/api/lists/{list_id}/comparison-snapshots").json()
-    assert first["id"] == second["id"]  # dedupe na janela curta
+    assert first["id"] == second["id"]  # mesma economia, sem duplicar no dashboard
+    # E a lista fica finalizada após registrar.
+    assert auth_client.get(f"/api/lists/{list_id}").json()["finalized"] is True
+
+
+def test_finalized_list_blocks_edit_and_delete(auth_client: TestClient) -> None:
+    """Após finalizar (snapshot), a lista não pode ser editada nem excluída."""
+    list_id = _list_with_full_coverage(auth_client)
+    auth_client.post(f"/api/lists/{list_id}/comparison-snapshots")
+
+    # Não pode adicionar item…
+    add = auth_client.post(f"/api/lists/{list_id}/items", json={"productId": "p1"})
+    assert add.status_code == 409 and add.json()["error"]["code"] == "list_finalized"
+    # …nem excluir a lista.
+    delete = auth_client.delete(f"/api/lists/{list_id}")
+    assert delete.status_code == 409 and delete.json()["error"]["code"] == "list_finalized"
+
+
+def test_editable_list_can_be_deleted(auth_client: TestClient) -> None:
+    """Enquanto NÃO finalizada, a lista pode ser excluída normalmente."""
+    list_id = auth_client.post("/api/lists", json={"name": "Rascunho"}).json()["id"]
+    assert auth_client.delete(f"/api/lists/{list_id}").status_code == 204
 
 
 def test_recent_savings(auth_client: TestClient) -> None:
@@ -176,7 +211,11 @@ def test_recent_savings(auth_client: TestClient) -> None:
     assert recent[0]["savedAmount"] == 0.81
 
 
-def test_user_isolation(auth_client: TestClient, client: TestClient) -> None:
+def test_dashboard_is_global_savings_recent_is_personal(
+    auth_client: TestClient, client: TestClient
+) -> None:
+    """O dashboard de inteligência é GLOBAL (dados de todos os usuários);
+    já `savings/recent` da Home continua PESSOAL."""
     list_id = _list_with_full_coverage(auth_client)
     auth_client.post(f"/api/lists/{list_id}/comparison-snapshots")
     auth_client.post("/api/analytics/search-events", json={"productId": "p1"})
@@ -185,9 +224,12 @@ def test_user_isolation(auth_client: TestClient, client: TestClient) -> None:
     other.post("/api/auth/signup", json={"name": "Outro", "email": "outro@x.com", "password": "12345678"})
     other.headers["X-CSRF-Token"] = other.cookies.get("listasmart_csrf") or ""
 
-    # O outro usuário não vê snapshots/savings da conta anterior.
+    # savings/recent é PESSOAL: o outro usuário não vê as economias da conta anterior.
     assert other.get("/api/savings/recent").json() == []
+
+    # Dashboard é GLOBAL: o outro usuário VÊ os dados agregados de todos.
     data = other.get("/api/analytics").json()
-    assert data["avgSavingsPerUser"] == 0
-    assert all(m["cheapestWins"] == 0 for m in data["marketCompetitiveness"])
-    # Buscas são globais (ranking de catálogo), mas savings/competitividade não vazam.
+    assert data["avgSavingsPerUser"] == 0.81
+    wins = {m["market"]["id"]: m["cheapestWins"] for m in data["marketCompetitiveness"]}
+    assert wins["bistek"] == 1
+    assert data["cheapestMarketByList"] == "Bistek"

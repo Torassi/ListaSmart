@@ -1,6 +1,6 @@
 /** MarketBarChart — ranking de mercados por competitividade (vezes mais barato). */
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { colorAt } from './chartTheme';
+import { CHART_AXIS, CHART_CURSOR, CHART_GRID, CHART_TOOLTIP_STYLE, colorAt } from './chartTheme';
 import type { MarketCompetitiveness } from '@/types';
 
 interface MarketBarChartProps {
@@ -13,13 +13,13 @@ export function MarketBarChart({ data }: MarketBarChartProps) {
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#E5EAF1" vertical={false} />
-        <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#475569' }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 12, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+        <XAxis dataKey="name" tick={{ fontSize: 12, fill: CHART_AXIS }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontSize: 12, fill: CHART_AXIS }} axisLine={false} tickLine={false} />
         <Tooltip
-          cursor={{ fill: '#F4F7FB' }}
+          cursor={{ fill: CHART_CURSOR }}
           formatter={(value: number) => [`${value}x mais barato`, '']}
-          contentStyle={{ borderRadius: 12, border: '1px solid #E5EAF1', fontSize: 13 }}
+          contentStyle={CHART_TOOLTIP_STYLE}
         />
         <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={64}>
           {chartData.map((_, i) => (

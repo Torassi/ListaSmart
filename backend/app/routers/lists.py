@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.errors import NotFoundError
+from app.errors import ConflictError, NotFoundError
 from app.models import ListItem, Product, ShoppingList, User
 from app.schemas import (
     AddItemInput,
@@ -33,6 +33,19 @@ def _get_owned_list(db: Session, list_id: str, user: User) -> ShoppingList:
         # Mesma resposta para "não existe" e "não é sua" — não vaza existência.
         raise NotFoundError("Lista não encontrada.")
     return shopping_list
+
+
+def _assert_editable(shopping_list: ShoppingList) -> None:
+    """Garante que a lista pode ser editada/excluída (não foi finalizada).
+
+    Listas finalizadas entraram no dashboard (snapshot registrado), então são
+    bloqueadas para edição e exclusão — só é possível mexer enquanto editando.
+    """
+    if shopping_list.finalized:
+        raise ConflictError(
+            "Lista finalizada não pode ser alterada nem excluída.",
+            code="list_finalized",
+        )
 
 
 def _touch(shopping_list: ShoppingList) -> None:
@@ -102,6 +115,7 @@ def delete_list(
     user: User = Depends(get_current_user),
 ) -> Response:
     shopping_list = _get_owned_list(db, list_id, user)
+    _assert_editable(shopping_list)
     db.delete(shopping_list)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -119,6 +133,7 @@ def add_item(
     user: User = Depends(get_current_user),
 ) -> ShoppingList:
     shopping_list = _get_owned_list(db, list_id, user)
+    _assert_editable(shopping_list)
 
     product = db.get(Product, payload.product_id)
     if product is None:
@@ -150,6 +165,7 @@ def update_item_quantity(
     user: User = Depends(get_current_user),
 ) -> ShoppingList:
     shopping_list = _get_owned_list(db, list_id, user)
+    _assert_editable(shopping_list)
     item = next((i for i in shopping_list.items if i.product_id == product_id), None)
     if item is None:
         raise NotFoundError("Item não encontrado na lista.")
@@ -168,6 +184,7 @@ def remove_item(
     user: User = Depends(get_current_user),
 ) -> ShoppingList:
     shopping_list = _get_owned_list(db, list_id, user)
+    _assert_editable(shopping_list)
     item = next((i for i in shopping_list.items if i.product_id == product_id), None)
     if item is None:
         raise NotFoundError("Item não encontrado na lista.")
@@ -185,6 +202,7 @@ def clear_list(
     user: User = Depends(get_current_user),
 ) -> ShoppingList:
     shopping_list = _get_owned_list(db, list_id, user)
+    _assert_editable(shopping_list)
     shopping_list.items.clear()
     _touch(shopping_list)
     db.commit()

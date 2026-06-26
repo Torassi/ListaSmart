@@ -1,6 +1,6 @@
 /** CategoryDonut — gráfico de rosca das categorias mais pesquisadas. */
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { colorAt } from './chartTheme';
+import { CHART_SURFACE, CHART_TOOLTIP_STYLE, colorAt } from './chartTheme';
 import type { CategoryShare } from '@/types';
 
 interface CategoryDonutProps {
@@ -20,7 +20,7 @@ export function CategoryDonut({ data }: CategoryDonutProps) {
           innerRadius={60}
           outerRadius={95}
           paddingAngle={2}
-          stroke="#FFFFFF"
+          stroke={CHART_SURFACE}
           strokeWidth={2}
         >
           {chartData.map((_, i) => (
@@ -29,7 +29,7 @@ export function CategoryDonut({ data }: CategoryDonutProps) {
         </Pie>
         <Tooltip
           formatter={(value: number) => [`${value} buscas`, '']}
-          contentStyle={{ borderRadius: 12, border: '1px solid #E5EAF1', fontSize: 13 }}
+          contentStyle={CHART_TOOLTIP_STYLE}
         />
         <Legend
           iconType="circle"

@@ -264,7 +264,7 @@ function buildSavings(userId: string): SavingsSummary[] {
     }));
 }
 
-function buildAnalytics(userId: string): AnalyticsData {
+function buildAnalytics(): AnalyticsData {
   const marketName = (id: string) =>
     state.markets.find((m) => m.id === id)?.name ?? id;
 
@@ -291,10 +291,10 @@ function buildAnalytics(userId: string): AnalyticsData {
     .sort((a, b) => b.diff - a.diff)
     .slice(0, 10);
 
-  // Competitividade: vitórias por mercado nos snapshots do usuário.
+  // Competitividade: vitórias por mercado em TODOS os snapshots (dashboard global).
   const wins = new Map<string, number>();
-  const userSnaps = state.snapshots.filter((s) => s.userId === userId);
-  for (const s of userSnaps) {
+  const allSnaps = state.snapshots;
+  for (const s of allSnaps) {
     if (s.cheapestMarketId) wins.set(s.cheapestMarketId, (wins.get(s.cheapestMarketId) ?? 0) + 1);
   }
   const marketCompetitiveness = state.markets
@@ -302,21 +302,28 @@ function buildAnalytics(userId: string): AnalyticsData {
     .sort((a, b) => b.cheapestWins - a.cheapestWins);
   const cheapestMarketByList =
     marketCompetitiveness[0]?.cheapestWins > 0 ? marketCompetitiveness[0].market.name : '—';
-  const avgSavingsPerUser = userSnaps.length
-    ? _round2(userSnaps.reduce((sum, s) => sum + s.savedAmount, 0) / userSnaps.length)
+  const avgSavingsPerUser = allSnaps.length
+    ? _round2(allSnaps.reduce((sum, s) => sum + s.savedAmount, 0) / allSnaps.length)
     : 0;
 
-  // Buscas: categorias e produtos mais pesquisados (globais).
+  // Categorias mais pesquisadas (eventos de busca, global).
   const catCount = new Map<string, number>();
-  const prodCount = new Map<string, number>();
   for (const e of state.searchEvents) {
     if (e.category) catCount.set(e.category, (catCount.get(e.category) ?? 0) + 1);
-    if (e.productId) prodCount.set(e.productId, (prodCount.get(e.productId) ?? 0) + 1);
   }
   const categoryShares = [...catCount.entries()]
     .map(([category, searches]) => ({ category: category as ProductCategory, searches }))
     .sort((a, b) => b.searches - a.searches);
-  const mostSearchedProducts = [...prodCount.entries()]
+
+  // Produtos mais LISTADOS: presença em listas FINALIZADAS (global), não buscas.
+  const listedCount = new Map<string, number>();
+  for (const l of state.lists) {
+    if (!l.finalized) continue;
+    for (const it of l.items) {
+      listedCount.set(it.product.id, (listedCount.get(it.product.id) ?? 0) + 1);
+    }
+  }
+  const mostSearchedProducts = [...listedCount.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([productId, searches]) => {
@@ -447,9 +454,9 @@ async function handle(method: string, path: string, body: any): Promise<Response
 
   // ---- Analytics (privado) ----
   if (rawPath === '/analytics' && method === 'GET') {
-    const user = currentUser();
-    if (!user) return ERR.unauthorized();
-    return json(buildAnalytics(user.id));
+    // Requer login, mas o dashboard é GLOBAL (dados de todos os usuários).
+    if (!currentUser()) return ERR.unauthorized();
+    return json(buildAnalytics());
   }
   if (rawPath === '/analytics/search-events' && method === 'POST') {
     const user = currentUser();
@@ -492,6 +499,7 @@ async function handle(method: string, path: string, body: any): Promise<Response
         name: String(body.name).trim(),
         items: [],
         collaborators: [toUser(user)],
+        finalized: false,
         createdAt: now,
         updatedAt: now,
       };
@@ -508,12 +516,18 @@ async function handle(method: string, path: string, body: any): Promise<Response
       return json(serializeList(list));
     }
     if (segments.length === 2 && method === 'DELETE') {
+      if (list.finalized) {
+        return ERR.conflict('list_finalized', 'Lista finalizada não pode ser alterada nem excluída.');
+      }
       state.lists = state.lists.filter((l) => l.id !== list.id);
       return json(null, 204);
     }
 
-    // /lists/{id}/items ...
+    // /lists/{id}/items ... (todas as operações são mutações)
     if (segments[2] === 'items') {
+      if (list.finalized) {
+        return ERR.conflict('list_finalized', 'Lista finalizada não pode ser alterada nem excluída.');
+      }
       if (segments.length === 3 && method === 'POST') {
         const product = state.products.find((p) => p.id === body.productId);
         if (!product) return ERR.notFound();
@@ -557,11 +571,12 @@ async function handle(method: string, path: string, body: any): Promise<Response
         );
       }
       const totals = new Map(comp.totals.map((t) => [t.marketId, t.total]));
-      // Dedupe: snapshot recente da mesma lista é reaproveitado.
-      const recent = state.snapshots.find(
-        (s) => s.userId === user.id && s.shoppingListId === list.id,
-      );
-      if (recent) return json(serializeSnapshot(recent), 201);
+      // Idempotente por lista: um único snapshot por lista (não duplica economia).
+      const recent = state.snapshots.find((s) => s.shoppingListId === list.id);
+      if (recent) {
+        list.finalized = true;
+        return json(serializeSnapshot(recent), 201);
+      }
 
       const snap: SnapshotRow = {
         id: state.seq++,
@@ -576,6 +591,8 @@ async function handle(method: string, path: string, body: any): Promise<Response
         createdAt: new Date(Date.now() + state.seq++).toISOString(),
       };
       state.snapshots.push(snap);
+      // Finaliza a lista: entra no dashboard e fica bloqueada para edição/exclusão.
+      list.finalized = true;
       return json(serializeSnapshot(snap), 201);
     }
   }

@@ -5,16 +5,24 @@
 import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
-export type BadgeTone = 'neutral' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
+export type BadgeTone =
+  | 'neutral'
+  | 'primary'
+  | 'secondary'
+  | 'accent'
+  | 'success'
+  | 'warning'
+  | 'danger';
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   tone?: BadgeTone;
 }
 
 const tones: Record<BadgeTone, string> = {
-  neutral: 'bg-bg text-text-muted',
+  neutral: 'bg-surface-muted text-text-muted ring-1 ring-inset ring-border',
   primary: 'bg-primary-soft text-primary-active',
   secondary: 'bg-secondary-soft text-secondary-active',
+  accent: 'bg-accent-soft text-accent-active',
   success: 'bg-primary-soft text-primary-active',
   warning: 'bg-warning/15 text-warning',
   danger: 'bg-danger/10 text-danger',

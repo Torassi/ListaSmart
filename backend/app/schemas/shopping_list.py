@@ -24,6 +24,7 @@ class ShoppingListOut(CamelModel):
     name: str
     items: list[ListItemOut]
     collaborators: list[UserOut]
+    finalized: bool = False
     created_at: datetime
     updated_at: datetime
 

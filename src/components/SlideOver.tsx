@@ -46,7 +46,7 @@ export function SlideOver({ open, onClose, title, description, children, footer 
         type="button"
         aria-label="Fechar painel"
         onClick={onClose}
-        className="absolute inset-0 bg-text/40 animate-fade-in"
+        className="absolute inset-0 bg-black/60 animate-fade-in"
       />
       <div
         ref={panelRef}
