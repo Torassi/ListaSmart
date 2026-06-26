@@ -2,7 +2,7 @@
 
 Plataforma web de **listas de compras colaborativas** com foco em **economia** e
 **comparação de preços** entre supermercados da região (ex.: Giassi, Angeloni,
-Bistek, Comper).
+Bistek, Fort Atacadista).
 
 Aplicação **full-stack integrada**: o front-end consome a API real, que persiste
 tudo em SQLite. Apenas alguns widgets de inteligência continuam em mock (ver
